@@ -44,7 +44,13 @@ def _check_tray_available() -> bool:
     if _tray_available is not None:
         return _tray_available
     
-    # 尝试导入 pystray（Windows 和 macOS 均支持）
+    # macOS: pystray 的 icon.run() 要求主线程（NSApplication），
+    # 在子线程中运行会导致 trace trap 崩溃，暂不支持
+    if platform.system() != 'Windows':
+        _tray_available = False
+        return False
+
+    # 尝试导入 pystray
     try:
         import pystray
         from PIL import Image
