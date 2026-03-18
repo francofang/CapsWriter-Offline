@@ -20,7 +20,7 @@ tell application "Terminal"
 
     delay 0.5
 
-    do script "cd ~/Projects/capswriter-mac && source venv/bin/activate && cd CapsWriter-Offline && sleep 8 && python core_client.py" in front window
+    do script "cd ~/Projects/capswriter-mac && source venv/bin/activate && cd CapsWriter-Offline && sleep 5 && python core_client.py" in front window
 
 end tell
 

@@ -81,8 +81,8 @@ fi
 # 追加到 hot.txt
 echo "$HOTWORD" &gt;&gt; "$HOT_FILE"
 
-# 弹出通知
-osascript -e "display notification \"已添加：$HOTWORD\" with title \"CapsWriter 热词\""</string>
+# 弹出确认（2秒自动关闭）
+osascript -e "display dialog \"已添加热词：$HOTWORD\" giving up after 2 with title \"CapsWriter\" buttons {\"OK\"}"</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
