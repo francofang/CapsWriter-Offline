@@ -2,14 +2,9 @@
 """
 托盘图标模块
 
-提供最小化到系统托盘的功能。
-仅在 Windows 平台有效。
-
-功能：
-- 禁用控制台窗口的关闭按钮（防止误关）
-- 最小化时自动隐藏到托盘
-- 双击托盘图标显示/隐藏窗口
-- 托盘菜单退出程序
+提供系统托盘/菜单栏图标功能。
+- Windows: 最小化到托盘，禁用关闭按钮，双击显示/隐藏窗口
+- macOS:   菜单栏图标，提供添加热词、纠错等快捷菜单
 
 注意：pystray 在 Linux 无 GUI 环境下无法导入，因此采用延迟导入。
 """
@@ -49,12 +44,7 @@ def _check_tray_available() -> bool:
     if _tray_available is not None:
         return _tray_available
     
-    # 非 Windows 系统不支持
-    if platform.system() != 'Windows':
-        _tray_available = False
-        return False
-    
-    # 尝试导入 pystray
+    # 尝试导入 pystray（Windows 和 macOS 均支持）
     try:
         import pystray
         from PIL import Image
@@ -206,20 +196,23 @@ class _TraySystem:
         # 延迟导入 pystray
         import pystray
         from pystray import MenuItem as item
-        
-        self.hwnd = _get_console_hwnd()
+
+        self._is_windows = platform.system() == 'Windows'
+        self.hwnd = _get_console_hwnd() if self._is_windows else 0
         self.should_exit = False
         self.title = name if name else (os.path.basename(sys.argv[0]) or "Console App")
 
-        # 禁用关闭按钮
-        if self.hwnd:
+        # 禁用关闭按钮（仅 Windows）
+        if self._is_windows and self.hwnd:
             _disable_close_button(self.hwnd)
 
         # 定义菜单
         menu_items = [
             item(f"{self.title}", lambda: None, enabled=False),
-            item('👁️ 显示/隐藏', self.toggle_window, default=True),
         ]
+        # 显示/隐藏窗口（仅 Windows，macOS 没有控制台窗口句柄）
+        if self._is_windows:
+            menu_items.append(item('👁️ 显示/隐藏', self.toggle_window, default=True))
 
         # 添加额外选项
         if more_options:
@@ -265,8 +258,8 @@ class _TraySystem:
         self.should_exit = True
         logger.debug("已设置托盘退出标志")
 
-        # 2. 恢复窗口关闭按钮并显示窗口
-        if self.hwnd and user32:
+        # 2. 恢复窗口关闭按钮并显示窗口（仅 Windows）
+        if self._is_windows and self.hwnd and user32:
             _enable_close_button(self.hwnd)
             user32.ShowWindow(self.hwnd, SW_RESTORE)
             logger.debug("已恢复窗口显示")
@@ -280,9 +273,7 @@ class _TraySystem:
             except Exception as e:
                 logger.error(f"调用退出回调函数时发生错误: {e}")
 
-
-
-        # 5. 停止托盘图标
+        # 4. 停止托盘图标
         try:
             logger.debug("正在停止托盘图标线程...")
             self.icon.stop()
@@ -296,12 +287,12 @@ class _TraySystem:
         t_tray = threading.Thread(target=self.icon.run, daemon=False)
         t_tray.start()
 
-        # 状态监控线程
-        t_monitor = threading.Thread(target=self.monitor_loop, daemon=True)
-        t_monitor.start()
-
-        # 启动时隐藏窗口
-        self.toggle_window()
+        if self._is_windows:
+            # 状态监控线程（仅 Windows：检测最小化 → 隐藏到托盘）
+            t_monitor = threading.Thread(target=self.monitor_loop, daemon=True)
+            t_monitor.start()
+            # 启动时隐藏窗口
+            self.toggle_window()
 
 
 def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = None, exit_callback=None, more_options: list = None) -> None:
@@ -330,18 +321,20 @@ def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = No
         logger.info("托盘功能不可用，跳过启用")
         return
 
-    # DPI 感知设置
-    try:
-        import ctypes
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception:
-        pass
+    # DPI 感知设置（仅 Windows）
+    if platform.system() == 'Windows':
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            pass
 
     with _lock:
         if _tray_instance is not None:
             return  # 已启动
 
-        if not _get_console_hwnd():
+        # Windows 需要控制台窗口句柄，macOS 不需要
+        if platform.system() == 'Windows' and not _get_console_hwnd():
             return  # 没有控制台窗口
 
         _tray_instance = _TraySystem(name, icon_path, more_options)
