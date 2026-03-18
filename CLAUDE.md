@@ -28,14 +28,24 @@
 - `util/fun_asr_gguf/inference/ctc.py` - 同上
 - `util/ui/tray.py` - 非 Windows 自动跳过
 
-### 第二阶段：客户端 (录音 + 输入) - 待开始
+### 第二阶段：客户端 (录音 + 输入) - 已完成
 
-客户端 (`core_client.py`) 尚未适配。已知需要处理：
-- `keyboard` 库不支持 macOS → 需用 `pynput` 替代
-- 全局快捷键监听机制
-- 模拟键盘输入（上屏）机制
-- 系统托盘图标
-- 音频采集设备选择
+客户端 (`core_client.py`) 已适配 macOS，可以初始化所有组件。
+
+**改动的文件**：
+- [`config_client.py`](config_client.py) - macOS 默认快捷键改为 `right_shift`（CapsLock 不可靠）
+- [`core_client.py`](core_client.py) - macOS 权限检查改为提示授权辅助功能（不再强制 sudo）
+- [`util/client/shortcut/key_mapper.py`](util/client/shortcut/key_mapper.py) - 添加 `pynput_key_to_name()` 跨平台函数，Win32 逻辑按平台隔离
+- [`util/client/shortcut/shortcut_manager.py`](util/client/shortcut/shortcut_manager.py) - macOS 使用 `on_press`/`on_release` 替代 `win32_event_filter`
+- [`util/llm/llm_get_selection.py`](util/llm/llm_get_selection.py) - `keyboard` → pynput，macOS 用 Cmd+C
+- [`util/llm/llm_output_typing.py`](util/llm/llm_output_typing.py) - `keyboard.write()` → macOS 自动降级为剪贴板粘贴
+- [`util/client/output/text_output.py`](util/client/output/text_output.py) - `_type_text()` macOS 分支用粘贴
+- [`util/client/output/result_processor.py`](util/client/output/result_processor.py) - debug 函数 macOS 跳过
+
+**已知限制**：
+- macOS 上鼠标侧键 (x1/x2) 监听不支持（pynput 限制）
+- macOS 上 `keyboard.write()` 流式打字不可用，自动降级为粘贴模式
+- 需要在「系统设置 → 隐私与安全 → 辅助功能」中授权终端应用
 
 ## macOS 运行前提
 
