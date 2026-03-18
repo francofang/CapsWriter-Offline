@@ -4,9 +4,10 @@ LLM Typing 输出模式
 直接打字输出，根据 paste 参数或 Config.paste 选择：
 - paste=True: 等流式输出完成后一次性粘贴
 - paste=False: 实时流式 write，每个字都打出来
+  - macOS: 自动降级为粘贴模式（keyboard.write 不可用）
 """
 import asyncio
-import keyboard
+import sys
 
 from config_client import ClientConfig as Config
 from util.tools.asyncio_to_thread import to_thread
@@ -14,6 +15,20 @@ from util.client.output.text_output import TextOutput
 from util.client.clipboard import paste_text
 from util.llm.llm_stop_monitor import reset, should_stop
 from . import logger
+
+
+def _write_text(text: str):
+    """跨平台文字输出：macOS 用粘贴，Windows 用 keyboard.write"""
+    if sys.platform == 'darwin':
+        import pyclip
+        from pynput import keyboard as pynput_keyboard
+        pyclip.copy(text)
+        controller = pynput_keyboard.Controller()
+        with controller.pressed(pynput_keyboard.Key.cmd):
+            controller.tap('v')
+    else:
+        import keyboard
+        keyboard.write(text)
 
 
 async def handle_typing_mode(text: str, paste: bool = None, matched_hotwords=None, role_config=None, content=None) -> tuple:
@@ -25,7 +40,7 @@ async def handle_typing_mode(text: str, paste: bool = None, matched_hotwords=Non
     # 如果没传，则现场检测一次（兼容性）
     if not role_config or content is None:
         role_config, content = handler.detect_role(text)
-    
+
     if not role_config:
         # 不应发生，但作为防守
         result_text = TextOutput.strip_punc(text)
@@ -35,6 +50,10 @@ async def handle_typing_mode(text: str, paste: bool = None, matched_hotwords=Non
     reset()  # 重置停止标志
 
     try:
+        # macOS: 流式打字模式不可用，降级为粘贴模式
+        if sys.platform == 'darwin' and not paste:
+            paste = True
+
         if paste:
             return await _process_paste(handler, role_config, content, matched_hotwords)
         else:
@@ -61,7 +80,7 @@ async def _process_paste(handler, role_config, content, matched_hotwords) -> tup
 
 
 async def _process_streaming(handler, role_config, content, matched_hotwords) -> tuple:
-    """处理流式打字模式：边生成边模拟按键打字"""
+    """处理流式打字模式：边生成边模拟按键打字（Windows 专用）"""
     chunks = []
     pending_buffer = ""
 
@@ -73,7 +92,7 @@ async def _process_streaming(handler, role_config, content, matched_hotwords) ->
         full_current = pending_buffer + chunk
         content_to_write = full_current
         trailing = ""
-        
+
         # 从右向左寻找第一个非 trash 字符
         for i in range(len(full_current) - 1, -1, -1):
             char = full_current[i]
@@ -88,8 +107,8 @@ async def _process_streaming(handler, role_config, content, matched_hotwords) ->
             trailing = full_current
 
         if content_to_write:
-            logger.debug(f"output_text: keyboard.write '{content_to_write}'")
-            keyboard.write(content_to_write)
+            logger.debug(f"output_text: write '{content_to_write}'")
+            _write_text(content_to_write)
             pending_buffer = trailing
         else:
             pending_buffer = trailing
@@ -107,22 +126,22 @@ async def _process_streaming(handler, role_config, content, matched_hotwords) ->
     # 如果模型没有任何输出，直接打出原文字
     if not chunks:
         final_text = TextOutput.strip_punc(content)
-        logger.debug(f"output_text: keyboard.write '{final_text}' (降级)")
-        keyboard.write(final_text)
+        logger.debug(f"output_text: write '{final_text}' (降级)")
+        _write_text(final_text)
         return (final_text, 0, 0.0)
-    
+
     # 如果 LLM 只输出标点，会被拦截，就要做补偿输出
     full_output = ''.join(chunks).strip()
     if len(full_output) == 1 and full_output in Config.trash_punc:
-        keyboard.write(full_output)
-    
+        _write_text(full_output)
+
     return (TextOutput.strip_punc(polished_text), token_count, gen_time)
 
 
 async def output_text(text: str, paste: bool = None):
     """输出文本（根据 paste 或 Config.paste 选择方式）"""
-    if paste:
+    if paste or sys.platform == 'darwin':
         await paste_text(text, restore_clipboard=Config.restore_clip)
     else:
-        logger.debug(f"output_text: keyboard.write '{text}'")
-        keyboard.write(text)
+        logger.debug(f"output_text: write '{text}'")
+        _write_text(text)

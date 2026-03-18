@@ -7,7 +7,11 @@
 2. 防止不同按键互相干扰
 3. restore 功能的防自捕获逻辑
 4. hold_mode 和 click_mode 支持
+
+Windows: 使用 win32_event_filter 回调处理原始消息
+macOS:   使用 on_press / on_release 回调处理 pynput Key 对象
 """
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Dict, List, Optional
@@ -15,16 +19,23 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from pynput import keyboard, mouse
 
 from . import logger
-from util.client.shortcut.key_mapper import *
-from util.client.shortcut.key_mapper import KeyMapper
+from util.client.shortcut.key_mapper import (
+    KeyMapper, RESTORABLE_KEYS, pynput_key_to_name,
+)
 from util.client.shortcut.emulator import ShortcutEmulator
 from util.client.shortcut.event_handler import ShortcutEventHandler
 from util.client.shortcut.task import ShortcutTask
 
+if sys.platform == 'win32':
+    from util.client.shortcut.key_mapper import (
+        KEYBOARD_MESSAGES, KEY_DOWN_MESSAGES, KEY_UP_MESSAGES,
+        MOUSE_MESSAGES, WM_KEYUP, WM_SYSKEYUP,
+        WM_XBUTTONDOWN, WM_XBUTTONUP, XBUTTON1,
+    )
+
 if TYPE_CHECKING:
     from util.client.shortcut.shortcut_config import Shortcut
     from util.client.state import ClientState
-
 
 
 class ShortcutManager:
@@ -32,17 +43,11 @@ class ShortcutManager:
     快捷键管理器
 
     统一管理多个快捷键，使用 pynput 监听键盘和鼠标事件。
-    所有事件处理都在 win32_event_filter 中完成，确保高性能和低延迟。
+    Windows: 使用 win32_event_filter 直接处理原始消息
+    macOS:   使用 on_press / on_release 回调
     """
 
     def __init__(self, state: 'ClientState', shortcuts: List['Shortcut']):
-        """
-        初始化快捷键管理器
-
-        Args:
-            state: 客户端状态实例
-            shortcuts: 快捷键配置列表
-        """
         self.state = state
         self.shortcuts = shortcuts
 
@@ -65,6 +70,9 @@ class ShortcutManager:
         # 事件处理器
         self._event_handler = ShortcutEventHandler(self.tasks, self._pool, self._emulator)
 
+        # macOS: 防自捕获用的 pressed 集合
+        self._emulating_pressed = set()
+
         # 初始化快捷键任务
         self._init_tasks()
 
@@ -82,12 +90,51 @@ class ShortcutManager:
             task.threshold = shortcut.get_threshold(Config.threshold)
             self.tasks[shortcut.key] = task
 
-    # ========== 监听器创建 ==========
+    # ========== macOS: on_press / on_release 回调 ==========
+
+    def _on_key_press(self, key):
+        """macOS 键盘按下回调"""
+        key_name = pynput_key_to_name(key)
+        if not key_name:
+            return
+
+        # 防自捕获
+        if key_name in self._emulating_pressed:
+            return
+        if key_name in self._restoring_keys:
+            return
+
+        if key_name not in self.tasks:
+            return
+
+        task = self.tasks[key_name]
+        self._event_handler.handle_keydown(key_name, task)
+
+    def _on_key_release(self, key):
+        """macOS 键盘释放回调"""
+        key_name = pynput_key_to_name(key)
+        if not key_name:
+            return
+
+        # 防自捕获 —— 释放时清除标志
+        if key_name in self._emulating_pressed:
+            self._emulating_pressed.discard(key_name)
+            return
+        if key_name in self._restoring_keys:
+            self._restoring_keys.discard(key_name)
+            return
+
+        if key_name not in self.tasks:
+            return
+
+        task = self.tasks[key_name]
+        self._event_handler.handle_keyup(key_name, task)
+
+    # ========== Windows: win32_event_filter 回调 ==========
 
     def create_keyboard_filter(self):
-        """创建键盘事件过滤器"""
+        """创建键盘事件过滤器（Windows 专用）"""
         def win32_event_filter(msg, data):
-            # 只处理 KEYDOWN 和 KEYUP 消息
             if msg not in KEYBOARD_MESSAGES:
                 return True
 
@@ -99,13 +146,11 @@ class ShortcutManager:
             if self._check_restoring(key_name, msg):
                 return True
 
-            # 查找匹配的快捷键
             if key_name not in self.tasks:
                 return True
 
             task = self.tasks[key_name]
 
-            # 处理按键事件
             if msg in KEY_DOWN_MESSAGES:
                 self._event_handler.handle_keydown(key_name, task)
             elif msg in KEY_UP_MESSAGES:
@@ -120,33 +165,27 @@ class ShortcutManager:
         return win32_event_filter
 
     def create_mouse_filter(self):
-        """创建鼠标事件过滤器"""
+        """创建鼠标事件过滤器（Windows 专用）"""
         def win32_event_filter(msg, data):
-            # 只处理 XBUTTON 消息
             if msg not in MOUSE_MESSAGES:
                 return True
 
-            # 获取按键标识
             xbutton = (data.mouseData >> 16) & 0xFFFF
             button_name = 'x1' if xbutton == XBUTTON1 else 'x2'
 
-            # 防自捕获检查
             if self._check_emulating(button_name, msg, is_mouse=True):
                 return True
 
-            # 查找匹配的快捷键
             if button_name not in self.tasks:
                 return True
 
             task = self.tasks[button_name]
 
-            # 处理鼠标事件
             if msg == WM_XBUTTONDOWN:
                 self._event_handler.handle_keydown(button_name, task)
             elif msg == WM_XBUTTONUP:
                 self._handle_mouse_keyup(button_name, task)
 
-            # 阻塞事件
             if task.shortcut.suppress and self.mouse_listener:
                 self.mouse_listener.suppress_event()
 
@@ -156,7 +195,6 @@ class ShortcutManager:
 
     def _handle_mouse_keyup(self, button_name: str, task) -> None:
         """处理鼠标按键释放事件"""
-        # 单击模式
         if not task.shortcut.hold_mode:
             if task.pressed:
                 task.pressed = False
@@ -164,7 +202,6 @@ class ShortcutManager:
                 task.event.set()
             return
 
-        # 长按模式
         if not task.is_recording:
             return
 
@@ -182,45 +219,34 @@ class ShortcutManager:
     # ========== 按键恢复管理 ==========
 
     def schedule_restore(self, key: str) -> None:
-        """
-        安排按键恢复（延迟执行，避免在事件处理中阻塞）
-
-        Args:
-            key: 要恢复的按键
-
-        注意：标志清除只在按键释放事件中处理（_check_restoring），
-        避免在线程中提前清除导致主线程收到重复消息。
-        """
-        from pynput import keyboard
+        """安排按键恢复（延迟执行）"""
+        from pynput import keyboard as kb
 
         self._restoring_keys.add(key)
 
         def do_restore():
             import time
-            time.sleep(0.05)  # 延迟 50ms
+            time.sleep(0.05)
             if key == 'caps_lock':
-                controller = keyboard.Controller()
-                controller.press(keyboard.Key.caps_lock)
-                controller.release(keyboard.Key.caps_lock)
+                controller = kb.Controller()
+                controller.press(kb.Key.caps_lock)
+                controller.release(kb.Key.caps_lock)
 
         self._pool.submit(do_restore)
 
     def is_restoring(self, key: str) -> bool:
-        """检查是否正在恢复指定按键"""
         return key in self._restoring_keys
 
     def clear_restoring_flag(self, key: str) -> None:
-        """清除恢复标志"""
         self._restoring_keys.discard(key)
 
-    # ========== 防自捕获检查 ==========
+    # ========== 防自捕获检查（Windows） ==========
 
     def _check_emulating(self, key_name: str, msg: int, is_mouse: bool = False) -> bool:
-        """检查是否正在模拟按键"""
+        """检查是否正在模拟按键（Windows 专用）"""
         if not self._emulator.is_emulating(key_name):
             return False
 
-        # 松开时清除标志
         if is_mouse:
             if msg == WM_XBUTTONUP:
                 self._emulator.clear_emulating_flag(key_name)
@@ -228,17 +254,17 @@ class ShortcutManager:
             if msg in (WM_KEYUP, WM_SYSKEYUP):
                 self._emulator.clear_emulating_flag(key_name)
 
-        return True  # 放行
+        return True
 
     def _check_restoring(self, key_name: str, msg: int) -> bool:
-        """检查是否正在恢复按键"""
+        """检查是否正在恢复按键（Windows 专用）"""
         if not self.is_restoring(key_name):
             return False
 
         if msg in (WM_KEYUP, WM_SYSKEYUP):
             self.clear_restoring_flag(key_name)
 
-        return True  # 放行
+        return True
 
     # ========== 公共接口 ==========
 
@@ -248,18 +274,29 @@ class ShortcutManager:
         has_mouse = any(s.type == 'mouse' for s in self.shortcuts if s.enabled)
 
         if has_keyboard:
-            self.keyboard_listener = keyboard.Listener(
-                win32_event_filter=self.create_keyboard_filter()
-            )
+            if sys.platform == 'win32':
+                self.keyboard_listener = keyboard.Listener(
+                    win32_event_filter=self.create_keyboard_filter()
+                )
+            else:
+                # macOS / Linux: 使用 on_press / on_release
+                self.keyboard_listener = keyboard.Listener(
+                    on_press=self._on_key_press,
+                    on_release=self._on_key_release,
+                )
             self.keyboard_listener.start()
             logger.info("键盘监听器已启动")
 
         if has_mouse:
-            self.mouse_listener = mouse.Listener(
-                win32_event_filter=self.create_mouse_filter()
-            )
-            self.mouse_listener.start()
-            logger.info("鼠标监听器已启动")
+            if sys.platform == 'win32':
+                self.mouse_listener = mouse.Listener(
+                    win32_event_filter=self.create_mouse_filter()
+                )
+                self.mouse_listener.start()
+                logger.info("鼠标监听器已启动")
+            else:
+                # macOS: 鼠标侧键监听暂不支持（pynput macOS 不支持 x1/x2）
+                logger.info("macOS 上暂不支持鼠标侧键监听，已跳过")
 
         # 打印所有启用的快捷键
         for shortcut in self.shortcuts:
@@ -278,11 +315,9 @@ class ShortcutManager:
             self.mouse_listener.stop()
             logger.debug("鼠标监听器已停止")
 
-        # 取消所有任务
         for task in self.tasks.values():
             if task.is_recording:
                 task.cancel()
 
-        # 关闭线程池
         self._pool.shutdown(wait=False)
         logger.debug("快捷键管理器线程池已关闭")

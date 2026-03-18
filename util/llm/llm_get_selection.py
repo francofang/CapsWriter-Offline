@@ -8,14 +8,16 @@ LLM 获取选中文字功能
 4. 还原原来的剪贴板内容
 5. 判断内容是否变化，返回选中的文字
 """
+import sys
 import time
 import pyclip
-import keyboard
+from pynput import keyboard as pynput_keyboard
 from . import logger
 from .llm_clipboard import safe_paste
 from util.client.state import get_state
 state = get_state()
 
+_controller = pynput_keyboard.Controller()
 
 # 全局变量：记录每个角色最后一次使用的选中文字
 _last_selection_by_role = {}
@@ -23,7 +25,7 @@ _last_selection_by_role = {}
 
 def get_selected_text(role_config) -> str:
     """
-    获取用户当前选中的文字（通过模拟 Ctrl+C）
+    获取用户当前选中的文字（通过模拟 Ctrl+C / Cmd+C）
 
     Args:
         role_config: 角色配置 RoleConfig 对象
@@ -43,8 +45,13 @@ def get_selected_text(role_config) -> str:
         # 保存当前剪贴板内容
         original_clipboard = safe_paste()
 
-        # 模拟 Ctrl+C 复制选中的文字
-        keyboard.press_and_release('ctrl+c')
+        # 模拟 Ctrl+C / Cmd+C 复制选中的文字
+        if sys.platform == 'darwin':
+            with _controller.pressed(pynput_keyboard.Key.cmd):
+                _controller.tap('c')
+        else:
+            with _controller.pressed(pynput_keyboard.Key.ctrl):
+                _controller.tap('c')
 
         # 等待复制操作完成
         time.sleep(0.1)

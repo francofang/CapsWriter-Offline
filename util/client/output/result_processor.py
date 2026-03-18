@@ -106,19 +106,22 @@ class ResultProcessor:
     def _log_modifier_key_state(self) -> None:
         """
         检测并记录当前按下的所有键
-        
+
         用于调试按键卡住问题。
+        仅在 Windows 上使用 keyboard 库；macOS 上跳过。
         """
+        import sys
+        if sys.platform == 'darwin':
+            return
         try:
             import keyboard
-            
+
             # 获取所有当前按下的键
             pressed_keys = keyboard._pressed_events
-            
-            # if pressed_keys:
+
             key_names = list(pressed_keys.keys())
             logger.debug(f"当前按下的键: {key_names}")
-                
+
         except Exception as e:
             logger.debug(f"检测按键状态失败: {e}")
     

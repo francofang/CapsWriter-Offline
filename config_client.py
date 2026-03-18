@@ -1,4 +1,5 @@
 import os
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -8,6 +9,7 @@ __version__ = '2.5-alpha'
 # 项目根目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+_platform = sys.platform
 
 # 客户端配置
 class ClientConfig:
@@ -15,22 +17,35 @@ class ClientConfig:
     port = '6016'               # Server 端口
 
     # 快捷键配置列表
-    shortcuts = [
-        {
-            'key': 'caps_lock',     # 监听大写锁定键
-            'type': 'keyboard',     # 是键盘快捷键
-            'suppress': True,      # 不阻塞按键（但录音结束会补发）
-            'hold_mode': True,      # 长按模式
-            'enabled': True         # 启用此快捷键
-        },
-        {
-            'key': 'x2',
-            'type': 'mouse',
-            'suppress': True,
-            'hold_mode': True,
-            'enabled': True
-        },
-    ]
+    if _platform == 'darwin':
+        # macOS: CapsLock 无法可靠监听，改用右 Shift；鼠标侧键不支持
+        shortcuts = [
+            {
+                'key': 'shift_r',       # 右 Shift 键
+                'type': 'keyboard',
+                'suppress': False,      # macOS 上 pynput 不支持 suppress
+                'hold_mode': True,
+                'enabled': True
+            },
+        ]
+    else:
+        # Windows
+        shortcuts = [
+            {
+                'key': 'caps_lock',     # 监听大写锁定键
+                'type': 'keyboard',
+                'suppress': True,       # 不阻塞按键（但录音结束会补发）
+                'hold_mode': True,
+                'enabled': True
+            },
+            {
+                'key': 'x2',
+                'type': 'mouse',
+                'suppress': True,
+                'hold_mode': True,
+                'enabled': True
+            },
+        ]
 
     threshold    = 0.3          # 快捷键触发阈值（秒）
 

@@ -12,7 +12,7 @@ import platform
 from typing import Optional
 import re
 
-import keyboard
+import sys
 import pyclip
 from pynput import keyboard as pynput_keyboard
 
@@ -107,11 +107,19 @@ class TextOutput:
         """
         通过模拟打字方式输出文本
 
-        使用 keyboard.write 替代 pynput.keyboard.Controller.type()，
-        避免与中文输入法冲突。
+        macOS: keyboard.write 不可用，降级为粘贴方式
+        Windows: 使用 keyboard.write
 
         Args:
             text: 要输出的文本
         """
         logger.debug(f"使用打字方式输出文本，长度: {len(text)}")
-        keyboard.write(text)
+        if sys.platform == 'darwin':
+            # macOS: 降级为粘贴方式
+            pyclip.copy(text)
+            controller = pynput_keyboard.Controller()
+            with controller.pressed(pynput_keyboard.Key.cmd):
+                controller.tap('v')
+        else:
+            import keyboard
+            keyboard.write(text)
