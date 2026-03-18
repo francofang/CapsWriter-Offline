@@ -137,6 +137,13 @@ def setup_client_components(base_dir):
     state.shortcut_manager = shortcut_manager
     shortcut_manager.start()
 
+    # 6.5 macOS 录音悬浮提示窗
+    if system() == 'Darwin':
+        from util.client.ui.recording_overlay import RecordingOverlay
+        overlay = RecordingOverlay()
+        overlay.start()
+        state.recording_overlay = overlay
+
     # 为了兼容性，同时保留旧的 shortcut_handler 引用
     state.shortcut_handler = shortcut_manager
 

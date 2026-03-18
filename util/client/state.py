@@ -65,6 +65,7 @@ class ClientState:
     processor: Any = None
     mouse_handler: Any = None
     udp_controller: Any = None
+    recording_overlay: Any = None
 
     recording: bool = False
     recording_start_time: float = 0.0
