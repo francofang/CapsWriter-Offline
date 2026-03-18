@@ -1,122 +1,117 @@
-# CapsWriter-Offline 开发指南
+# CapsWriter-Offline macOS Port
 
-## 核心设计 (Core Design)
-**"快、准、稳、离线"**
-- **离线 (Offline)**: 全本地模型 (ASR, 标点, LLM)，保护隐私。
-- **C/S 架构**:
-    - **Server**: 主进程处理 WebSocket，**独立子进程**运行 AI 模型（Sherpa-ONNX, Paraformer等），确保推理（CPU密集）不阻塞网络心跳。
-    - **Client**: 轻量启动，负责全局快捷键监听、录音采集、UI 展示。
-- **源代码开放**: `start_*.py` 为打包入口（冻结），`core_*.py` 为源码入口。发行版保留 `core_*.py` 供用户修改逻辑。
-- **配置化**: `config.py` 及 `hot*.txt`、`LLM/*.py` 位于根目录，支持热重载。
-- **版本**: v2.3（2026-01-17）
+## Fork 说明
 
-## 架构细节与流程 (Architecture & Workflows)
+本仓库是 [HaujetZhao/CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline) 的 fork，目标是将 CapsWriter-Offline 从 Windows 移植到 **macOS (Apple Silicon ARM64)**。
 
-### 1. 识别全链路 (Recognition Flow)
-- **采集**: Client 监听 CapsLock。按下就开始收集录音chunk，超过 **0.3s (Threshold)** 不松则触发识别，**实时流式**通过 WebSocket 发送。
-- **切片 (Slicing)**: Client 配置 `mic_seg_duration` (25s) 和 `mic_seg_overlap` (2s)。Server 仅基于时间切片，**禁用 VAD** 以保留完整上下文。
-- **Server 处理**:
-    - **双重结果**: 同时计算 `text` (简单文本拼接, Robust) 和 `text_accu` (基于 Token 时间戳去重, Precision)。
-    - **拼接算法**: `text_accu`使用 **Token 时间戳去重** ([`util/server/text_merge.py`](util/server/text_merge.py))，`text` 使用 **模糊文本匹配**。
-- **Client 后处理**:
-    - **触发**: 用户**松开按键** -> Server 返回 IsFinal 结果。
-    - **热词 (RAG)**: 基于 **音素 (Phoneme)** 的两阶段模糊检索，匹配 `hot.txt`（统一中英文热词）。
-    - **LLM 润色**: 根据角色配置进行智能润色或回答。
-    - **上屏**: 模拟键盘输入或Toast显示。
+- **原项目**: https://github.com/HaujetZhao/CapsWriter-Offline
+- **原版本**: v2.5-alpha
+- **移植分支**: `macos-port`
+- **目标平台**: macOS 15+ (Apple Silicon M4 Mac mini)
 
-### 2. 客户端模式 (Client Modes)
-- **听写 (Dictation)**: 默认模式。按住快捷键 -> 流式识别 -> 松开上屏。
-- **转录 (Transcription)**: 拖入文件 -> `ffmpeg` 提取音频 -> 发送 Server -> 接收带时间戳结果 -> 生成 `.srt`。
+## 移植进度
 
-### 3. LLM Agent & 智能修正
-- **实时监控 (Hot Reload)**: Client 启动文件监视器，实时响应 `hot*.txt` 和 `LLM/*.py` 的修改。
-- **角色系统**: 模块化的 LLM 角色配置，支持多角色切换。
-- **角色触发**: 检测识别结果前缀（如"翻译"、"助理"），匹配 [`LLM/`](LLM/) 下定义的角色。
-- **Context 组装**（根据角色配置决定是否启用）:
-    1.  **历史纠错**: RAG 检索 `hot-rectify.txt` 历史修正库（`enable_rectify`）。
-    2.  **潜在热词**: RAG 检索 `hot.txt`（`enable_hotwords`）。
-    3.  **选中文字**: 模拟 Ctrl+C 获取的鼠标选中文本（`enable_read_selection`）。
-    4.  **对话历史**: 保留上下文历史记录（`enable_history`）。
-    5.  **用户指令**: 当前语音输入内容。
-- **输出模式**:
-    - **typing**: 直接模拟键盘打字输出。
-    - **toast**: 在 Toast 弹窗中显示，支持 Markdown 渲染。
-- **UI**: 结果流式显示在 **Toast** (Tkinter 无边框置顶窗)，支持 Markdown 渲染。
+### 第一阶段：服务端 (ASR 引擎) - 已完成
 
-### 4. 热词系统 (Hotword System)
-- **统一文件**: `hot.txt` 统一管理中英文热词（基于音素匹配）。
-- **两阶段检索**:
-    1.  **FastRAG**: 倒排索引 + Numba JIT 快速粗筛（减少 90% 计算量）。
-    2.  **AccuRAG**: 模糊音权重精确匹配（前后鼻音、平翘舌等）。
-- **双阈值机制**:
-    - `hot_thresh` (0.85): 高阈值用于实际替换。
-    - `hot_similar` (0.65): 低阈值用于 LLM 上下文参考。
-- **规则替换**: `hot-rule.txt` 支持正则表达式规则替换。
-- **纠错历史**: `hot-rectify.txt` 保存和检索历史修正记录。
+服务端 (`core_server.py`) 已可在 macOS 上正常启动，Fun-ASR-Nano 模型加载成功，Metal GPU 加速生效。
 
-### 5. 历史归档 (Diary)
-- **按日期归档**: `年份/月份/日期.md`。
-- **音频**: 原始录音存入 `年份/月份/assets/`，Markdown 中自动生成 HTML 音频控件链接。
+**改动的文件**：
+- [`config_server.py`](config_server.py) - 默认模型切换为 `fun_asr_nano`，Vulkan 自动按平台禁用
+- [`util/fun_asr_gguf/inference/core/model_manager.py`](util/fun_asr_gguf/inference/core/model_manager.py) - macOS 跳过 Vulkan 环境变量
+- [`util/qwen_asr_gguf/inference/asr.py`](util/qwen_asr_gguf/inference/asr.py) - 同上
+- [`.gitignore`](.gitignore) - 添加 `*.dylib` 忽略
 
-## 关键路径 (Key Paths)
-- **配置**: [`config.py`](config.py) (根目录).
-- **热词**:
-    - [`hot.txt`](hot.txt) - 统一 RAG 音素匹配（中英文）
-    - [`hot-rule.txt`](hot-rule.txt) - 规则替换
-    - [`hot-rectify.txt`](hot-rectify.txt) - 历史修正 RAG
-- **LLM角色**: [`LLM/*.py`](LLM/) (根目录, 定义 Role/Prompt/Model)
-    - [`default.py`](LLM/default.py) - 默认角色（热词、润色）
-    - [`翻译.py`](LLM/翻译.py) - 翻译角色
-    - [`高级翻译.py`](LLM/高级翻译.py) - 高级翻译
-    - [`Python.py`](LLM/Python.py) - Python 编程助手
-    - [`命令.py`](LLM/命令.py) - 命令执行
-    - [`大助理.py`](LLM/大助理.py) - 大助理
-    - [`小助理.py`](LLM/小助理.py) - 小助理
-- **逻辑核心**: [`util/`](util/) (含 `client`, `server`, `llm`, `hotword` 等子模块).
-    - [`util/client/`](util/client/) - 客户端工具（音频、输入、处理、UI）
-    - [`util/server/`](util/server/) - 服务端工具（WebSocket、识别、拼接）
-    - [`util/llm/`](util/llm/) - LLM 处理（角色、上下文、输出）
-    - [`util/hotword/`](util/hotword/) - 热词管理（RAG、规则、纠错）
-- **日志**: `logs/client.log` & `logs/server.log` (排查问题唯一入口).
-- **协议**: [`util/protocol.py`](util/protocol.py).
+**无需修改的文件**（已有跨平台支持）：
+- `util/fun_asr_gguf/inference/llama.py` - 已有 darwin/dylib 分支
+- `util/qwen_asr_gguf/inference/llama.py` - 同上
+- `util/fun_asr_gguf/inference/encoder.py` - DmlExecutionProvider 检测安全
+- `util/fun_asr_gguf/inference/ctc.py` - 同上
+- `util/ui/tray.py` - 非 Windows 自动跳过
 
-## 打包与部署 (Build)
-- [`build.spec`](build.spec): Server + Client 打包。
-- [`build-client.spec`](build-client.spec): 仅 Client (Win7兼容).
-- **策略**: 所有 Python 依赖放入 `internal/`。根目录仅保留配置文件、源码入口 ([`core_*.py`](core_client.py))、模型文件夹 ([`models/`](models/)) 和说明文档。
-- **PyInstaller 6.0+**: 使用现代化打包配置，支持 CUDA provider 可选收集。
+### 第二阶段：客户端 (录音 + 输入) - 待开始
 
-## 模型支持 (Models)
-- **FunASR-Nano**: 最准，速度稍慢。
-    - 下载: `sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2`
-- **SenseVoice**: 多语言支持（中英日韩粤）。
-    - 下载: `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2`
-- **Paraformer**: 大模型，准确率高。
-- **Punct-CT-Transformer**: 标点模型。
-- **FireRed**: 大模型（未使用）。
+客户端 (`core_client.py`) 尚未适配。已知需要处理：
+- `keyboard` 库不支持 macOS → 需用 `pynput` 替代
+- 全局快捷键监听机制
+- 模拟键盘输入（上屏）机制
+- 系统托盘图标
+- 音频采集设备选择
 
-## LLM 提供商支持 (LLM Providers)
-- **Ollama**: 本地部署（默认）。
-- **OpenAI**: GPT 系列。
-- **DeepSeek**: deepseek 系列。
-- **Moonshot**: 月之暗面。
-- **Zhipu**: 智谱 AI。
-- **Claude**: Anthropic Claude。
-- **Gemini**: Google Gemini。
+## macOS 运行前提
 
-## 用户偏好 (User Preferences)
-- **语言**: 中文 (Chinese)，总结、Plan、WalkThrough、注释都要用中文。
-- **路径链接**: 总结时文件必须显示为相对路径链接（精确到行，便于点击跳转）。
-- **系统**: macOS (Apple Silicon ARM64, M4 Mac mini) / Windows 10, PowerShell (命令行分隔符 `;`).
-- **环境 (macOS)**: `~/Projects/capswriter-mac/venv/` Python 3.12 虚拟环境。llama.cpp 使用 Metal 加速。
-- **环境 (Windows)**: 运行前确保 `conda activate capswriter`，或用 `D:\anaconda3\envs\capswriter\python.exe` 执行，新建测试脚本要手动指定 console utf-8 输出。
+### 1. Homebrew 依赖
 
-## 最新更新 (Recent Updates)
-- **2026-01-12**: 语音切片加长至 25 秒。
-- **角色模板**: 完善角色配置模板文档 ([`LLM/__init__.py`](LLM/__init__.py))。
-- **音素 RAG**: 两阶段检索优化性能。
-- **LLM 集成**: 支持多提供商、多角色、上下文管理。
-- **UI 增强**: Toast 弹窗支持 Markdown 渲染和自定义样式。
-- **热词统一**: 中英文热词统一到 `hot.txt`。
-- **生命周期管理**: 优化退出处理和资源清理。
-- **错误处理**: 改进 WebSocket 连接错误处理。
+```bash
+brew install portaudio protobuf ffmpeg git cmake python-tk@3.12
+```
+
+### 2. Python 虚拟环境
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+pip install sherpa-onnx numpy gguf onnxruntime rich websockets watchdog pypinyin pystray Pillow markdown tkhtmlview srt
+```
+
+注意：
+- 安装 `onnxruntime`（标准版），**不是** `onnxruntime-directml`（Windows 专用）
+- `keyboard` 库在 macOS 上不能用，客户端阶段再用 `pynput` 替代
+
+### 3. llama.cpp 动态库
+
+从 https://github.com/ggml-org/llama.cpp/releases 下载最新的 macOS ARM64 版本：
+
+```bash
+# 示例：b8400 版本
+curl -L -o /tmp/llama.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/b8400/llama-b8400-bin-macos-arm64.tar.gz
+cd /tmp && mkdir llama_extract && tar xzf llama.tar.gz -C llama_extract
+
+# 复制到 3 个 bin 目录（需保留版本号符号链接）
+for dest in \
+  util/fun_asr_gguf/inference/bin \
+  util/qwen_asr_gguf/inference/bin \
+  util/llama/bin; do
+  cp -a /tmp/llama_extract/llama-b8400/libggml*.dylib "$dest/"
+  cp -a /tmp/llama_extract/llama-b8400/libllama*.dylib "$dest/"
+done
+```
+
+必须保留带版本号的文件（如 `libggml-cpu.0.9.7.dylib`）和对应的符号链接（如 `libggml-cpu.0.dylib` → `libggml-cpu.0.9.7.dylib`），因为 dylib 之间通过 `@rpath` 引用版本号名称。
+
+### 4. 模型文件
+
+从 https://github.com/HaujetZhao/CapsWriter-Offline/releases/tag/models 下载：
+
+- **Fun-ASR-Nano-GGUF**（当前默认）→ 解压到 `models/Fun-ASR-Nano/Fun-ASR-Nano-GGUF/`
+  - `Fun-ASR-Nano-Encoder-Adaptor.int4.onnx`
+  - `Fun-ASR-Nano-CTC.int4.onnx`
+  - `Fun-ASR-Nano-Decoder.q5_k.gguf`
+  - `tokens.txt`
+
+- **Qwen3-ASR**（可选）→ 解压到 `models/Qwen3-ASR/Qwen3-ASR-1.7B/`
+
+### 5. 启动服务端
+
+```bash
+cd CapsWriter-Offline
+source ../venv/bin/activate
+python core_server.py
+```
+
+看到 `开始服务` 即表示启动成功。Metal GPU 加速自动生效（M 系列芯片）。
+
+## 原项目架构 (参考)
+
+### C/S 架构
+- **Server** (`core_server.py`): WebSocket 主进程 + 独立识别子进程（防止 CPU 密集的推理阻塞网络心跳）
+- **Client** (`core_client.py`): 全局快捷键监听、录音采集、结果上屏、LLM 润色
+
+### 识别链路
+Client 按住快捷键 → 录音流式发送 → Server ONNX 编码 + GGUF LLM 解码 → 返回文本 → Client 热词校正 + LLM 润色 → 上屏
+
+### 关键路径
+- **配置**: `config_server.py` / `config_client.py`
+- **热词**: `hot.txt`（音素 RAG）、`hot-rule.txt`（正则替换）、`hot-rectify.txt`（历史修正）
+- **LLM 角色**: `LLM/*.py`（支持 Ollama/OpenAI/DeepSeek/Claude/Gemini 等）
+- **模型引擎**: `util/fun_asr_gguf/`（ONNX + llama.cpp 混合）、`util/qwen_asr_gguf/`
+- **日志**: `logs/server.log` & `logs/client.log`
