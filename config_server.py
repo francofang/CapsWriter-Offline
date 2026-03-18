@@ -1,5 +1,8 @@
 import os
+import sys
 from pathlib import Path
+
+_platform = sys.platform
 
 # 版本信息
 __version__ = '2.5-alpha'
@@ -14,7 +17,7 @@ class ServerConfig:
     port = '6016'
 
     # 语音模型选择：'fun_asr_nano', 'sensevoice', 'paraformer', 'qwen_asr'
-    model_type = 'qwen_asr'
+    model_type = 'fun_asr_nano'
 
     format_num = True       # 输出时是否将中文数字转为阿拉伯数字
     format_spell = True     # 输出时是否调整中英之间的空格
@@ -106,7 +109,7 @@ class FunASRNanoGGUFArgs:
 
     # 显卡加速
     dml_enable = False          # 是否启用 DirectML 加速 ONNX 模型，实测 AMD 显卡上会慢，因此默认关闭，建议N卡开启
-    vulkan_enable = True        # 是否启用 Vulkan 加速 GGUF 模型
+    vulkan_enable = _platform != 'darwin'  # macOS 使用 Metal 加速，无需 Vulkan
     vulkan_force_fp32 = False   # 是否强制 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 True）
     
     # 模型细节
@@ -129,7 +132,7 @@ class Qwen3ASRGGUFArgs:
 
     # 显卡加速
     use_dml = False             # 是否启用 DirectML 加速 ONNX 模型，实测 AMD 显卡上会慢，因此默认关闭，建议N卡开启
-    vulkan_enable = True        # 是否启用 Vulkan 加速 GGUF 模型
+    vulkan_enable = _platform != 'darwin'  # macOS 使用 Metal 加速，无需 Vulkan
     vulkan_force_fp32 = False   # 是否强制 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 True）
     
     # 模型细节

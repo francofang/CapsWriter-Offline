@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -12,15 +13,16 @@ from ..schema import ASREngineConfig
 
 class ModelManager:
     """管理所有模型组件的代码"""
-    
+
     def __init__(self, config: ASREngineConfig):
         self.config = config
-        
-        # 设置图形加速环境
-        if not self.config.vulkan_enable:
-            os.environ["VK_ICD_FILENAMES"] = "none"       # 禁止 Vulkan
-        if self.config.vulkan_force_fp32:
-            os.environ["GGML_VK_DISABLE_F16"] = "1"       # 禁止 VulkanFP16 计算（Intel集显fp16有溢出问题）
+
+        # 设置图形加速环境（macOS 使用 Metal，无需 Vulkan 配置）
+        if sys.platform != 'darwin':
+            if not self.config.vulkan_enable:
+                os.environ["VK_ICD_FILENAMES"] = "none"       # 禁止 Vulkan
+            if self.config.vulkan_force_fp32:
+                os.environ["GGML_VK_DISABLE_F16"] = "1"       # 禁止 VulkanFP16 计算（Intel集显fp16有溢出问题）
 
         # 运行时组件
         self.encoder = None

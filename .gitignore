@@ -186,5 +186,6 @@ file_*.txt
 *summary*.md
 
 release
-*.dll 
+*.dll
+*.dylib
 *.exe

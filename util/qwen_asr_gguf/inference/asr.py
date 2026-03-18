@@ -1,5 +1,6 @@
 # coding=utf-8
 import os
+import sys
 import time
 import re
 import codecs
@@ -22,7 +23,7 @@ class ASRS_Segment:
     audio_start: float
     audio_end: float
     text: str = ""
-    items: List[ForcedAlignItem] = None   
+    items: List[ForcedAlignItem] = None
 
 class QwenASREngine:
     """Qwen3-ASR 流式转录引擎 (GGUF 后端) - 统一辅助进程架构"""
@@ -31,11 +32,12 @@ class QwenASREngine:
         self.verbose = config.verbose
         if self.verbose: print(f"--- [QwenASR] 初始化引擎 (DML: {config.use_dml}, Vulkan: {config.vulkan_enable}) ---")
 
-        # 设置图形加速环境
-        if not config.vulkan_enable:
-            os.environ["VK_ICD_FILENAMES"] = "none"       # 禁止 Vulkan
-        if config.vulkan_force_fp32:
-            os.environ["GGML_VK_DISABLE_F16"] = "1"       # 禁止 VulkanFP16 计算（Intel集显fp16有溢出问题）
+        # 设置图形加速环境（macOS 使用 Metal，无需 Vulkan 配置）
+        if sys.platform != 'darwin':
+            if not config.vulkan_enable:
+                os.environ["VK_ICD_FILENAMES"] = "none"       # 禁止 Vulkan
+            if config.vulkan_force_fp32:
+                os.environ["GGML_VK_DISABLE_F16"] = "1"       # 禁止 VulkanFP16 计算（Intel集显fp16有溢出问题）
 
         self.llama_mod = llama # keep reference
         
