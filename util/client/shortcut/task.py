@@ -83,10 +83,6 @@ class ShortcutTask:
         # 打印动画：正在录音
         self._status.start()
 
-        # macOS 悬浮提示窗
-        if self.state.recording_overlay:
-            self.state.recording_overlay.show()
-
         # 启动识别任务
         recorder = self._get_recorder()
         self.task = asyncio.run_coroutine_threadsafe(
@@ -102,10 +98,6 @@ class ShortcutTask:
         self.state.stop_recording()
         self._status.stop()
 
-        # macOS 悬浮提示窗
-        if self.state.recording_overlay:
-            self.state.recording_overlay.hide()
-
         self.task.cancel()
         self.task = None
 
@@ -116,10 +108,6 @@ class ShortcutTask:
         self.is_recording = False
         self.state.stop_recording()
         self._status.stop()
-
-        # macOS 悬浮提示窗
-        if self.state.recording_overlay:
-            self.state.recording_overlay.hide()
 
         asyncio.run_coroutine_threadsafe(
             self.state.queue_in.put({

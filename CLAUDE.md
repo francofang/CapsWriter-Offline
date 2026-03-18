@@ -47,24 +47,6 @@
 - macOS 上 `keyboard.write()` 流式打字不可用，自动降级为粘贴模式
 - 需要在「系统设置 → 隐私与安全 → 辅助功能」中授权终端应用
 
-### 第三阶段：录音悬浮提示窗 - 已完成
-
-macOS 上按住快捷键录音时，屏幕底部弹出悬浮窗作为视觉反馈（类似系统听写功能）。
-
-**新增文件**：
-- [`util/client/ui/recording_overlay.py`](util/client/ui/recording_overlay.py) - 录音悬浮提示窗（Tkinter subprocess 实现，圆角半透明窗口，红点呼吸动画）
-
-**改动的文件**：
-- [`util/client/shortcut/task.py`](util/client/shortcut/task.py) - `launch()`/`finish()`/`cancel()` 中调用 overlay 的 show/hide
-- [`util/client/startup.py`](util/client/startup.py) - macOS 上自动启动 overlay 子进程
-- [`util/client/state.py`](util/client/state.py) - `ClientState` 增加 `recording_overlay` 属性
-- [`util/client/cleanup.py`](util/client/cleanup.py) - 退出时清理 overlay 子进程
-
-**技术说明**：
-- 使用 subprocess + Tkinter 架构，避免与主线程 asyncio 事件循环冲突
-- 通过 ctypes 调用 ObjC 运行时设置 `NSApplicationActivationPolicyAccessory`（不在 Dock 显示、不抢焦点）
-- macOS 专属，Windows 上不启动（`sys.platform == 'darwin'` 守卫）
-
 ## macOS 运行前提
 
 ### 1. Homebrew 依赖

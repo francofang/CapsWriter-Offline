@@ -39,14 +39,6 @@ def cleanup_client_resources():
         except Exception as e:
             logger.warning(f"停止鼠标监听时发生错误: {e}")
 
-    # 停止录音悬浮提示窗
-    if state.recording_overlay:
-        try:
-            state.recording_overlay.cleanup()
-            logger.debug("录音悬浮提示窗已关闭")
-        except Exception as e:
-            logger.warning(f"关闭录音悬浮提示窗时发生错误: {e}")
-
     # 停止音频流
     if state.stream_manager:
         try:
