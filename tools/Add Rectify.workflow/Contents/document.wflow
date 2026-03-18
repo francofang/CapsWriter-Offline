@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AMApplicationBuild</key>
+	<string>523</string>
+	<key>AMApplicationVersion</key>
+	<string>2.10</string>
+	<key>AMDocumentVersion</key>
+	<string>2</string>
+	<key>actions</key>
+	<array>
+		<dict>
+			<key>action</key>
+			<dict>
+				<key>AMAccepts</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Optional</key>
+					<false/>
+					<key>Types</key>
+					<array>
+						<string>com.apple.cocoa.string</string>
+					</array>
+				</dict>
+				<key>AMActionVersion</key>
+				<string>1.0.2</string>
+				<key>AMApplication</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>AMCategory</key>
+				<string>AMCategoryUtilities</string>
+				<key>AMIconName</key>
+				<string>Run Shell Script</string>
+				<key>AMParameterProperties</key>
+				<dict>
+					<key>COMMAND_STRING</key>
+					<dict/>
+					<key>inputMethod</key>
+					<dict/>
+					<key>shell</key>
+					<dict/>
+				</dict>
+				<key>AMProvides</key>
+				<dict>
+					<key>Container</key>
+					<string>List</string>
+					<key>Types</key>
+					<array>
+						<string>com.apple.cocoa.string</string>
+					</array>
+				</dict>
+				<key>AMRequiredResources</key>
+				<array/>
+				<key>ActionBundlePath</key>
+				<string>/System/Library/Automator/Run Shell Script.action</string>
+				<key>ActionName</key>
+				<string>Run Shell Script</string>
+				<key>ActionParameters</key>
+				<dict>
+					<key>COMMAND_STRING</key>
+					<string>#!/bin/bash
+# CapsWriter-Offline: 添加纠错记录快捷操作
+# 选中错误文字后触发，弹对话框输入正确文字，写入 hot-rectify.txt
+
+RECTIFY_FILE="$HOME/Projects/capswriter-mac/CapsWriter-Offline/hot-rectify.txt"
+
+# 从 stdin 读取选中的文字（作为原始错误文本）
+ORIGINAL=$(cat)
+ORIGINAL=$(echo "$ORIGINAL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+if [ -z "$ORIGINAL" ]; then
+    osascript -e 'display notification "没有选中文字" with title "CapsWriter"'
+    exit 0
+fi
+
+# 弹出对话框，让用户输入正确的文字
+CORRECTED=$(osascript -e "
+set originalText to \"$ORIGINAL\"
+set dialogResult to display dialog \"原始文本：\" &amp; originalText &amp; return &amp; return &amp; \"请输入正确的文字：\" default answer \"\" with title \"CapsWriter 纠错\" buttons {\"取消\", \"确认\"} default button \"确认\"
+if button returned of dialogResult is \"确认\" then
+    return text returned of dialogResult
+end if
+" 2&gt;/dev/null)
+
+# 用户取消或输入为空
+if [ -z "$CORRECTED" ]; then
+    exit 0
+fi
+
+# 追加到 hot-rectify.txt
+printf '\n%s\n%s\n---\n' "$ORIGINAL" "$CORRECTED" &gt;&gt; "$RECTIFY_FILE"
+
+# 弹出通知
+osascript -e "display notification \"$ORIGINAL → $CORRECTED\" with title \"CapsWriter 纠错\""</string>
+					<key>CheckedForUserDefaultShell</key>
+					<true/>
+					<key>inputMethod</key>
+					<integer>0</integer>
+					<key>shell</key>
+					<string>/bin/bash</string>
+				</dict>
+				<key>BundleIdentifier</key>
+				<string>com.apple.RunShellScript</string>
+				<key>CFBundleVersion</key>
+				<string>1.0.2</string>
+				<key>CanShowSelectedItemsWhenRun</key>
+				<false/>
+				<key>CanShowWhenRun</key>
+				<true/>
+				<key>Category</key>
+				<array>
+					<string>AMCategoryUtilities</string>
+				</array>
+				<key>Class Name</key>
+				<string>RunShellScriptAction</string>
+				<key>InputUUID</key>
+				<string>B2B3B4B5-C2C3-D2D3-E2E3-F2F3F4F5F6F7</string>
+				<key>Keywords</key>
+				<array>
+					<string>Shell</string>
+					<string>Script</string>
+					<string>Command</string>
+					<string>Run</string>
+				</array>
+				<key>OutputUUID</key>
+				<string>C3C4C5C6-D3D4-E3E4-F3F4-A3A4A5A6A7A8</string>
+				<key>UUID</key>
+				<string>22222222-3333-4444-5555-666666666666</string>
+				<key>UnlocalizedApplications</key>
+				<array>
+					<string>Automator</string>
+				</array>
+				<key>arguments</key>
+				<dict/>
+				<key>conversionLabel</key>
+				<integer>0</integer>
+				<key>isViewVisible</key>
+				<integer>1</integer>
+			</dict>
+		</dict>
+	</array>
+	<key>connectors</key>
+	<dict/>
+	<key>workflowMetaData</key>
+	<dict>
+		<key>applicationBundleID</key>
+		<string>com.apple.Automator</string>
+		<key>applicationBundleIDsByPath</key>
+		<dict/>
+		<key>applicationPath</key>
+		<string>/System/Applications/Automator.app</string>
+		<key>inputTypeIdentifier</key>
+		<string>com.apple.Automator.text</string>
+		<key>presentationMode</key>
+		<integer>15</integer>
+		<key>processesInput</key>
+		<integer>0</integer>
+		<key>serviceApplicationGroupName</key>
+		<string>Text</string>
+		<key>serviceApplicationPath</key>
+		<string></string>
+		<key>serviceInputTypeIdentifier</key>
+		<string>com.apple.Automator.text</string>
+		<key>serviceOutputTypeIdentifier</key>
+		<string>com.apple.Automator.nothing</string>
+		<key>uniqueName</key>
+		<string>Add Rectify</string>
+		<key>workflowTypeIdentifier</key>
+		<string>com.apple.Automator.servicesMenu</string>
+	</dict>
+</dict>
+</plist>
