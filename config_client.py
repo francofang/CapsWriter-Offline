@@ -24,7 +24,7 @@ class ClientConfig:
                 'key': 'shift_r',       # 右 Shift 键
                 'type': 'keyboard',
                 'suppress': False,      # macOS 上 pynput 不支持 suppress
-                'hold_mode': True,
+                'hold_mode': False,     # 单击模式：按一下开始录音，再按一下结束
                 'enabled': True
             },
         ]
