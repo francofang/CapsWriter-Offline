@@ -46,12 +46,19 @@ _main_task = None  # 主任务引用
 
 
 def _check_macos_permissions() -> None:
-    """检查 MacOS 权限设置"""
+    """检查 macOS 权限设置"""
     if system() == 'Darwin' and not sys.argv[1:]:
+        # macOS 上需要辅助功能权限才能监听全局键盘事件
+        # 两种方式均可：
+        #   1. 在「系统设置 → 隐私与安全 → 辅助功能」中授权 Terminal.app（推荐）
+        #   2. 使用 sudo 启动（不推荐，但兼容旧版 macOS）
         if os.getuid() != 0:
-            print('在 MacOS 上需要以管理员启动客户端才能监听键盘活动，请 sudo 启动')
-            input('按回车退出')
-            sys.exit(1)
+            print('提示：macOS 上监听全局快捷键需要「辅助功能」权限。')
+            print('请在「系统设置 → 隐私与安全 → 辅助功能」中授权你的终端应用。')
+            print('或者使用 sudo 启动：sudo -E python core_client.py')
+            print()
+            print('如果已授权，可忽略此提示，程序将继续运行...')
+            print()
         else:
             os.umask(0o000)
 
