@@ -140,8 +140,74 @@ ggml_metal_device_init: GPU name: MTL0                ← Metal 后端成功初�
 ggml_metal_device_init: GPU family: MTLGPUFamilyApple9
 ggml_metal_device_init: has unified memory = true
 ggml_metal_device_init: has bfloat = true
-llama_model_load_from_file_impl: using device MTL0 (Apple M4) - 12123 MiB free
+llama_metal_device_init: using device MTL0 (Apple M4) - 12123 MiB free
 语音模型载入完成 (fun_asr_nano)
 模型加载耗时 7.49s
 开始服务                                            ← 服务启动成功
 ```
+
+---
+
+## Tkinter 线程崩溃修复 (2026-03-19)
+
+### 问题
+
+客户端在 macOS 上使用时偶尔发生 Python crash（SIGABRT / SIGSEGV），macOS 弹出"Python 意外退出"提示。在 2026-03-18 至 2026-03-19 期间累计触发 **12 次崩溃**。
+
+### 诊断过程
+
+1. **收集 crash report**：检查 `~/Library/Logs/DiagnosticReports/Python-*.ips`，发现全部 12 次崩溃都与 Tkinter 相关
+2. **分析崩溃栈**：三种崩溃类型均指向同一根因：
+   - `EXC_CRASH` (SIGABRT) — `TkMacOSXMakeRealWindowExist` → `NSWindow initWithContentRect`
+   - `EXC_BAD_ACCESS` (SIGSEGV) — `_tkinter` 模块
+   - `EXC_BREAKPOINT` (SIGTRAP) — `_tkinter` 模块
+3. **确认线程上下文**：崩溃发生在 Thread 17（`ToastManagerThread` 守护线程），而非主线程
+4. **主线程在做什么**：`asyncio` 事件循环（`select_kqueue_control`）
+
+### 根因
+
+macOS 的 AppKit 框架**要求所有 NSWindow（GUI 窗口）操作必须在主线程（Thread 0）执行**。
+
+原实现中 `ToastMessageManager` 在守护线程中调用 `tk.Tk()` + `mainloop()`。这在 Windows 上没问题，但在 macOS 上违反了 AppKit 的线程安全要求，导致随机崩溃。
+
+### 修复方案
+
+**在 macOS 上将 Tkinter 集成到主线程的 asyncio 事件循环中**，不使用独立的守护线程：
+
+- `ToastMessageManager.__init__()` 检测平台，macOS 上调用 `_init_tk_mainthread()` 在主线程创建 `tk.Tk()`
+- 通过 asyncio 任务（`_tk_update_loop`）周期性调用 `root.update()` 处理 Tk 事件，替代 `mainloop()`
+- asyncio、Tkinter、pynput 键盘模拟全部在主线程运行，避免线程冲突
+- Windows/Linux 保持原有的守护线程模式不变
+
+> **曾尝试的方案（已放弃）**：将 asyncio 移到后台线程、Tkinter 在主线程运行 `mainloop()`。
+> 但这导致 pynput 键盘模拟（`TSMGetInputSourceProperty`）也从后台线程调用，触发了新的 `dispatch_assert_queue` 崩溃。
+> macOS 上 Tkinter 和 pynput 都需要主线程，因此最终选择了 asyncio `root.update()` 集成方案。
+
+### 修改的文件
+
+#### `util/ui/toast_manager.py`
+- macOS 上不启动 `ToastManagerThread` 守护线程
+- 新增 `_init_tk_mainthread()`：在主线程创建 `tk.Tk()` 并启动 asyncio 更新任务
+- 新增 `_tk_update_loop()`：50Hz 周期调用 `root.update()` 驱动 Tk 事件
+- `_on_close()` 增加 asyncio 任务取消逻辑
+
+#### `util/common/lifecycle.py`
+- `_register_signals()` 添加 `threading.main_thread()` 检查
+- 非主线程跳过 `signal.signal()` 注册（避免 `ValueError`），作为安全防护
+
+---
+
+## 个人配置文件从 Git 跟踪移除 (2026-03-19)
+
+### 问题
+
+`hot.txt`、`hot-rectify.txt`、`hot-rule.txt` 包含用户个人热词和纠错规则，被 git 跟踪后会推送到远程仓库，泄露个人数据。
+
+### 修改
+
+1. 使用 `git rm --cached` 将三个文件从 git 跟踪中移除（本地文件保留）
+2. 在 `.gitignore` 中添加这三个文件名
+3. 创建 `.example` 模板文件供其他用户参考格式：
+   - `hot.txt.example` — 热词文件模板（仅保留注释说明）
+   - `hot-rectify.txt.example` — 纠错文件模板（保留格式示例）
+   - `hot-rule.txt.example` — 正则规则文件模板（保留通用规则）
