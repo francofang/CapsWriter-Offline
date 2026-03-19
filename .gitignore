@@ -171,6 +171,11 @@ logs/
 .vscode
 .agent
 
+# 个人热词/纠错配置（使用 .example 模板）
+hot.txt
+hot-rectify.txt
+hot-rule.txt
+
 LLM/大助理.py
 LLM/高级翻译.py
 diag*.py
