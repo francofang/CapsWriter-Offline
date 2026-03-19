@@ -3,9 +3,11 @@ Toast 消息管理器模块
 
 提供 ToastMessageManager 单例类，管理所有 Toast 窗口的生命周期。
 """
+import asyncio
 import logging
 import threading
 import tkinter as tk
+from platform import system
 from queue import Queue
 from dataclasses import dataclass
 from typing import Literal, Optional, Callable, Union, List, TYPE_CHECKING
@@ -119,17 +121,54 @@ class ToastMessageManager:
         self.is_running = False
         self.active_windows: List = []  # 运行时类型，避免循环导入
         self.root: Optional[tk.Tk] = None
+        self._tk_update_task: Optional[asyncio.Task] = None
 
-        # 在子线程中启动 Tkinter
-        self.manager_thread = threading.Thread(
-            target=self._run_manager,
-            daemon=True,
-            name="ToastManagerThread"
-        )
-        self.manager_thread.start()
+        if system() == 'Darwin':
+            # macOS: 在当前（主）线程创建 Tk，通过 asyncio 驱动事件循环。
+            # macOS AppKit 要求所有 NSWindow 操作在主线程执行，
+            # 因此不能在守护线程中创建 Tk。
+            self._init_tk_mainthread()
+        else:
+            # Windows/Linux: 在守护线程中运行 Tkinter 主循环
+            self.manager_thread = threading.Thread(
+                target=self._run_manager,
+                daemon=True,
+                name="ToastManagerThread"
+            )
+            self.manager_thread.start()
+
+    def _init_tk_mainthread(self) -> None:
+        """macOS: 在主线程初始化 Tk，用 asyncio 任务驱动事件更新。
+
+        不调用 mainloop()，而是通过周期性 root.update() 处理 Tk 事件，
+        这样 asyncio 和 Tkinter 都在主线程上运行，互不冲突。
+        """
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.tk.call('tk', 'scaling', TK_SCALING_FACTOR)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self.is_running = True
+        self._process_queue()  # 启动 after() 轮询
+
+        # 启动 asyncio 任务，周期性调用 root.update() 处理 Tk 事件
+        try:
+            loop = asyncio.get_running_loop()
+            self._tk_update_task = loop.create_task(self._tk_update_loop())
+        except RuntimeError:
+            logger.warning("无法获取 asyncio 事件循环，Tk 事件可能不会被处理")
+
+    async def _tk_update_loop(self) -> None:
+        """asyncio 任务：周期性处理 Tk 事件（替代 mainloop）"""
+        while self.is_running and self.root:
+            try:
+                self.root.update()
+            except tk.TclError:
+                break
+            await asyncio.sleep(0.02)  # 50Hz 刷新率
 
     def _run_manager(self) -> None:
-        """在子线程中运行 Tkinter 主循环"""
+        """在子线程中运行 Tkinter 主循环（Windows/Linux）"""
         # 创建隐藏的主窗口
         self.root = tk.Tk()
         self.root.withdraw()
@@ -148,6 +187,10 @@ class ToastMessageManager:
     def _on_close(self) -> None:
         """关闭所有窗口并退出"""
         self.is_running = False
+
+        # 取消 asyncio 驱动的 Tk 更新任务（macOS）
+        if self._tk_update_task and not self._tk_update_task.done():
+            self._tk_update_task.cancel()
 
         for window in self.active_windows[:]:
             try:

@@ -86,6 +86,9 @@ class LifecycleManager:
 
     def _register_signals(self):
         """注册 SIGINT 和 SIGTERM 信号处理器"""
+        if threading.current_thread() is not threading.main_thread():
+            self.logger.debug("非主线程，跳过信号处理器注册")
+            return
         try:
             signal.signal(signal.SIGINT, self._signal_handler)
             signal.signal(signal.SIGTERM, self._signal_handler)
