@@ -68,27 +68,29 @@ class RecordingIndicator:
 
         try:
             from AppKit import (
+                NSApplication, NSApplicationActivationPolicyAccessory,
                 NSPanel, NSFloatingWindowLevel,
                 NSWindowStyleMaskNonactivatingPanel, NSWindowStyleMaskBorderless,
                 NSBackingStoreBuffered,
                 NSTextField, NSFont, NSColor, NSMakeRect,
-                NSView,
+                NSView, NSScreen,
             )
             from Quartz import CGEventGetLocation, CGEventCreate
 
-            # 获取鼠标位置
+            # 防止 Python 出现在 Dock
+            app = NSApplication.sharedApplication()
+            app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+
+            # 获取鼠标位置（Quartz 坐标系：左上角为原点）
             event = CGEventCreate(None)
             mouse = CGEventGetLocation(event)
 
-            # macOS 坐标系：左下角为原点，需要转换
-            # 屏幕高度用于 y 坐标转换
-            from AppKit import NSScreen
+            # 转换为 AppKit 坐标系（左下角为原点）
             screen_h = NSScreen.mainScreen().frame().size.height
 
-            # 指示器位置：鼠标上方 40px
-            w, h = 130, 28
+            w, h = 140, 30
             x = mouse.x - w / 2
-            y = screen_h - mouse.y + 20  # 转换坐标 + 上方偏移
+            y = screen_h - mouse.y + 20  # 鼠标上方 20px
 
             # 创建不抢焦点的浮动面板
             panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -113,16 +115,16 @@ class RecordingIndicator:
 
             # 文字标签
             label = NSTextField.labelWithString_(ANIMATION_FRAMES[0])
-            label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(13, 0.0))
+            label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(14, 0.0))
             label.setTextColor_(NSColor.colorWithRed_green_blue_alpha_(0, 1, 0.53, 1))
-            label.setFrame_(NSMakeRect(12, 4, w - 24, 20))
+            label.setFrame_(NSMakeRect(10, 5, w - 20, 20))
             label.setDrawsBackground_(False)
             label.setBezeled_(False)
             label.setEditable_(False)
             label.setSelectable_(False)
             content.addSubview_(label)
 
-            panel.orderFront_(None)
+            panel.orderFrontRegardless()
 
             self._panel = panel
             self._label = label
