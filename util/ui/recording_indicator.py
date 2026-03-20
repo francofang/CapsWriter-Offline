@@ -126,8 +126,16 @@ class RecordingIndicator:
 
             panel.orderFrontRegardless()
 
+            # 立即刷新 AppKit 事件循环让面板渲染
+            from Foundation import NSRunLoop, NSDate
+            NSRunLoop.currentRunLoop().runUntilDate_(
+                NSDate.dateWithTimeIntervalSinceNow_(0.05)
+            )
+
             self._panel = panel
             self._label = label
+
+            logger.info(f"RecordingIndicator 已显示: x={x:.0f}, y={y:.0f}, mouse=({mouse.x:.0f},{mouse.y:.0f}), screen_h={screen_h:.0f}")
 
             # 启动动画
             self._animation_task = asyncio.get_event_loop().create_task(
@@ -153,6 +161,7 @@ class RecordingIndicator:
 
     async def _animate_loop(self) -> None:
         """动画循环"""
+        from Foundation import NSRunLoop, NSDate
         frame = 0
         try:
             while True:
@@ -160,5 +169,9 @@ class RecordingIndicator:
                 frame = (frame + 1) % len(ANIMATION_FRAMES)
                 if self._label:
                     self._label.setStringValue_(ANIMATION_FRAMES[frame])
+                    # 刷新 AppKit 事件循环让面板更新
+                    NSRunLoop.currentRunLoop().runUntilDate_(
+                        NSDate.dateWithTimeIntervalSinceNow_(0.001)
+                    )
         except asyncio.CancelledError:
             pass
