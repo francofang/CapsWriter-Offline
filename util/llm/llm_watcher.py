@@ -203,11 +203,9 @@ class LLMFileWatcher(FileSystemEventHandler):
 
     def start(self):
         """启动监控"""
-        # 监控 LLM 目录
+        # 监控 LLM 目录（热词文件由 HotwordManager 的 watcher 负责）
         self.observer.schedule(self, str(self.llm_dir), recursive=False)
-        # 同时也监控 Base 目录（为了 hot files），non-recursive
-        self.observer.schedule(self, str(self.base_dir), recursive=False)
-        
+
         self.observer.start()
         logger.info("LLM 文件监控已启动")
 
