@@ -124,9 +124,12 @@ class RecordingIndicator:
             label.setSelectable_(False)
             content.addSubview_(label)
 
+            # 确保面板可见（sleep/wake 后可能需要重新激活）
+            panel.setIsVisible_(True)
+            panel.display()
             panel.orderFrontRegardless()
 
-            # 立即刷新 AppKit 事件循环让面板渲染
+            # 刷新 AppKit 事件循环让面板渲染
             from Foundation import NSRunLoop, NSDate
             NSRunLoop.currentRunLoop().runUntilDate_(
                 NSDate.dateWithTimeIntervalSinceNow_(0.05)
