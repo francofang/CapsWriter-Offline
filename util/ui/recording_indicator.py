@@ -88,7 +88,7 @@ class RecordingIndicator:
             # 转换为 AppKit 坐标系（左下角为原点）
             screen_h = NSScreen.mainScreen().frame().size.height
 
-            w, h = 140, 30
+            w, h = 105, 22
             x = mouse.x - w / 2
             y = screen_h - mouse.y + 20  # 鼠标上方 20px
 
@@ -107,17 +107,17 @@ class RecordingIndicator:
             panel.setBackgroundColor_(NSColor.clearColor())
             content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, w, h))
             content.setWantsLayer_(True)
-            content.layer().setCornerRadius_(8)
+            content.layer().setCornerRadius_(6)
             content.layer().setBackgroundColor_(
-                NSColor.colorWithRed_green_blue_alpha_(0.0, 0.0, 0.0, 0.0).CGColor()
+                NSColor.colorWithRed_green_blue_alpha_(0.15, 0.15, 0.15, 0.75).CGColor()
             )
             panel.setContentView_(content)
 
             # 文字标签
             label = NSTextField.labelWithString_(ANIMATION_FRAMES[0])
-            label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(14, 0.0))
-            label.setTextColor_(NSColor.colorWithRed_green_blue_alpha_(0, 1, 0.53, 1))
-            label.setFrame_(NSMakeRect(10, 5, w - 20, 20))
+            label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
+            label.setTextColor_(NSColor.colorWithRed_green_blue_alpha_(0.3, 1, 0.55, 1))
+            label.setFrame_(NSMakeRect(8, 2, w - 16, 18))
             label.setDrawsBackground_(False)
             label.setBezeled_(False)
             label.setEditable_(False)
