@@ -90,7 +90,7 @@ class RecordingIndicator:
 
             w, h = 105, 22
             x = mouse.x - w / 2
-            y = screen_h - mouse.y + 20  # 鼠标上方 20px
+            y = screen_h - mouse.y + 5  # 鼠标上方一行距离
 
             # 创建不抢焦点的浮动面板
             panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
