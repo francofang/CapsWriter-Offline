@@ -1,3 +1,44 @@
+# CapsWriter-Offline macOS Port
+
+> **CapsWriter-Offline 的 macOS (Apple Silicon) 移植版，按一下右 Shift 说话，再按一下就上屏。完全离线，Metal GPU 加速。**
+
+本仓库是 [HaujetZhao/CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline) v2.5-alpha 的 fork，将原本仅支持 Windows 的语音输入工具移植到了 **macOS (Apple Silicon)**。
+
+原项目因底层 `keyboard` 库不支持 macOS、以及 Vulkan/DirectML 显卡加速仅限 Windows 等原因，无法在 Mac 上运行。本 fork 逐一解决了这些问题，使其在 M 系列芯片 Mac 上完整可用。
+
+**macOS 版的详细安装指南、使用方法和配置说明请参阅 [README-macOS.md](README-macOS.md)。**
+
+## 移植了什么
+
+| 改动领域 | 原版 (Windows) | macOS 移植版 |
+|---------|---------------|-------------|
+| GPU 加速 | Vulkan / DirectML | Metal（自动生效） |
+| 全局快捷键 | `keyboard` 库 + Win32 API | `pynput` + on_press/on_release |
+| 默认快捷键 | CapsLock / 鼠标侧键 X2 | 右 Shift（CapsLock 在 macOS 上不可靠） |
+| 文字上屏 | `keyboard.write()` 流式打字 | 剪贴板粘贴（Cmd+V） |
+| 选中文字读取 | Ctrl+C | Cmd+C |
+| 权限模型 | 管理员权限 / sudo | 辅助功能授权（系统设置） |
+| 动态库 | `.dll` | `.dylib`（llama.cpp macOS ARM64） |
+| 托盘菜单 | Windows 系统托盘 | Automator Quick Action |
+| 鼠标侧键 | 支持 X1/X2 | 不支持（pynput 限制） |
+
+核心识别逻辑（ONNX 编码 + llama.cpp 解码）、WebSocket 通信、热词系统、LLM 角色等**完全不变**，与原版行为一致。
+
+## macOS 版的技术变更与新功能
+
+- **键盘库替换** — `keyboard` → `pynput`，通过 `on_press`/`on_release` 监听快捷键，`Controller` 模拟 Cmd+V 粘贴
+- **Tkinter 线程模型重构** — macOS AppKit 要求窗口操作在主线程，改为 asyncio 驱动 `root.update()` 替代守护线程的 `mainloop()`，修复随机 Python 崩溃
+- **录音状态浮动指示器** — 使用 PyObjC `NSPanel`（`NSWindowStyleMaskNonactivatingPanel`）在光标附近显示绿点动画，不抢输入焦点
+- **一键启动/关闭脚本** — `start-capswriter.command` toggle 模式，双击启动，再双击关闭
+- **热词/纠错快捷操作** — 通过 Automator Quick Action 弹出对话框添加热词和纠错记录，替代 Windows 托盘菜单
+- **文件监控冲突修复** — FSEvents 下 watchdog 重复监控导致异常，已分离 LLM 和热词的监控职责
+
+---
+
+# 以下为原版 README
+
+---
+
 # CapsWriter-Offline (v2.5)
 
 ![demo](assets/demo.png)
