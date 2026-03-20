@@ -109,7 +109,7 @@ class RecordingIndicator:
             content.setWantsLayer_(True)
             content.layer().setCornerRadius_(8)
             content.layer().setBackgroundColor_(
-                NSColor.colorWithRed_green_blue_alpha_(0.1, 0.1, 0.18, 0.92).CGColor()
+                NSColor.colorWithRed_green_blue_alpha_(0.0, 0.0, 0.0, 0.0).CGColor()
             )
             panel.setContentView_(content)
 
