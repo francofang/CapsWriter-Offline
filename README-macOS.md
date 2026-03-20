@@ -68,16 +68,6 @@
 
 相关文件：`tools/Add Hotword.workflow`、`tools/Add Rectify.workflow`
 
-### 个人配置文件与 Git 分离
-
-`hot.txt`、`hot-rectify.txt`、`hot-rule.txt` 包含用户个人热词和纠错规则，已从 Git 跟踪中移除并加入 `.gitignore`。仓库中保留 `.example` 模板文件供参考格式。首次使用时，复制模板并重命名：
-
-```bash
-cp hot.txt.example hot.txt
-cp hot-rectify.txt.example hot-rectify.txt
-cp hot-rule.txt.example hot-rule.txt
-```
-
 ### 文件监控冲突修复
 
 原版的 `LLMFileWatcher` 和 `HotwordManager` 各自创建独立的 watchdog `Observer` 监控项目根目录，在 macOS FSEvents 下会触发重复监控冲突。修复后 `LLMFileWatcher` 仅监控 `LLM/` 目录，热词文件监控由 `HotwordManager` 统一负责。

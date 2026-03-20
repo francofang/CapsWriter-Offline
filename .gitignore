@@ -176,6 +176,9 @@ hot.txt
 hot-rectify.txt
 hot-rule.txt
 
+# 私有笔记
+docs/PRIVATE-NOTES.md
+
 LLM/大助理.py
 LLM/高级翻译.py
 diag*.py
