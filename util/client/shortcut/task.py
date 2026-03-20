@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import subprocess
 import time
 from threading import Event
 from typing import TYPE_CHECKING, Optional
@@ -82,6 +83,12 @@ class ShortcutTask:
 
         # 打印动画：正在录音
         self._status.start()
+
+        # macOS 通知气泡（不抢焦点）
+        subprocess.Popen(
+            ['osascript', '-e', 'display notification "按住快捷键录音中..." with title "CapsWriter" sound name ""'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
 
         # 启动识别任务
         recorder = self._get_recorder()
