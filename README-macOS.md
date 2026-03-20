@@ -23,6 +23,68 @@
 核心识别逻辑（ONNX 编码 + llama.cpp 解码）、WebSocket 通信、热词系统、LLM 角色等**完全不变**，与原版行为一致。
 
 
+## macOS 版的技术变更与新功能
+
+### 键盘库替换：`keyboard` → `pynput`
+
+原版使用 Python `keyboard` 库监听全局快捷键和模拟按键输入，该库依赖 Win32 API，无法在 macOS 上运行。macOS 移植版改用 `pynput`，通过 `on_press` / `on_release` 回调监听快捷键，通过 `pynput.keyboard.Controller` 模拟 Cmd+V 粘贴。
+
+相关文件：`util/client/shortcut/shortcut_manager.py`、`util/client/shortcut/key_mapper.py`、`util/client/output/text_output.py`
+
+### Tkinter 线程模型重构（修复 Python 崩溃）
+
+原版在守护线程中运行 Tkinter 的 `tk.Tk()` + `mainloop()` 来显示 Toast 弹窗通知。在 macOS 上，AppKit 要求所有窗口操作必须在主线程执行，守护线程创建窗口会导致随机 SIGABRT / SIGSEGV 崩溃。
+
+修复方案：macOS 上不再使用独立的 Tkinter 线程，而是在主线程创建 `tk.Tk()`，通过 asyncio 任务周期性调用 `root.update()` 驱动 Tk 事件循环，替代 `mainloop()`。这样 asyncio、Tkinter、pynput 都在主线程运行，避免线程冲突。Windows/Linux 保持原有的守护线程模式不变。
+
+相关文件：`util/ui/toast_manager.py`、`util/common/lifecycle.py`
+
+### 录音状态浮动指示器（macOS 新增）
+
+录音时在鼠标光标上方显示一个小型半透明浮动窗口，带有绿色圆点流动动画（`●∙∙ 录音中`），录音结束后自动消失。即使 Terminal 最小化也能看到录音状态。
+
+使用 PyObjC 创建 macOS 原生 `NSPanel`（`NSWindowStyleMaskNonactivatingPanel`），不会抢走输入焦点，不影响正在打字的应用。这是 macOS 原生语音输入法使用的相同技术。
+
+相关文件：`util/ui/recording_indicator.py`
+
+### 一键启动/关闭脚本（macOS 新增）
+
+`start-capswriter.command` 是一个 toggle 开关：
+- **第一次双击**：在 Terminal 中打开两个 tab，依次启动 Server 和 Client
+- **再次双击**：关闭 Server 和 Client，自动关闭 Terminal 窗口（无需手动确认）
+
+启动命令末尾附加 `; exit`，使 Python 进程结束后 shell 自动退出，避免关闭时弹出 "Terminate running processes?" 对话框。
+
+相关文件：`start-capswriter.command`
+
+### 热词/纠错添加方式（macOS 新增）
+
+原版通过 Windows 托盘菜单添加热词和纠错记录。macOS 上托盘菜单不可用，改为 **Automator Quick Action（快捷操作）**：
+
+- **Add Hotword**：弹出对话框，输入热词后自动追加到 `hot.txt`
+- **Add Rectify**：弹出对话框，输入原文和修正文本后追加到 `hot-rectify.txt`
+
+安装方式：双击 `tools/Add Hotword.workflow` 和 `tools/Add Rectify.workflow`，或运行 `tools/install-shortcuts.sh`。安装后可在「系统设置 → 键盘 → 键盘快捷键 → 服务」中为它们分配全局快捷键。
+
+相关文件：`tools/Add Hotword.workflow`、`tools/Add Rectify.workflow`
+
+### 个人配置文件与 Git 分离
+
+`hot.txt`、`hot-rectify.txt`、`hot-rule.txt` 包含用户个人热词和纠错规则，已从 Git 跟踪中移除并加入 `.gitignore`。仓库中保留 `.example` 模板文件供参考格式。首次使用时，复制模板并重命名：
+
+```bash
+cp hot.txt.example hot.txt
+cp hot-rectify.txt.example hot-rectify.txt
+cp hot-rule.txt.example hot-rule.txt
+```
+
+### 文件监控冲突修复
+
+原版的 `LLMFileWatcher` 和 `HotwordManager` 各自创建独立的 watchdog `Observer` 监控项目根目录，在 macOS FSEvents 下会触发重复监控冲突。修复后 `LLMFileWatcher` 仅监控 `LLM/` 目录，热词文件监控由 `HotwordManager` 统一负责。
+
+相关文件：`util/llm/llm_watcher.py`
+
+
 ## 安装指南
 
 > 以下步骤在 macOS 15+ / Apple Silicon (M1–M4) 上验证通过。
