@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Optional
 
 from . import logger
 from util.tools.my_status import Status
+from util.ui.recording_indicator import RecordingIndicator
 
 if TYPE_CHECKING:
     from util.client.shortcut.shortcut_config import Shortcut
@@ -55,6 +56,7 @@ class ShortcutTask:
 
         # 录音状态动画
         self._status = Status('开始录音', spinner='point')
+        self._indicator = RecordingIndicator()
 
     def _get_recorder(self) -> 'AudioRecorder':
         """获取 AudioRecorder 实例"""
@@ -82,6 +84,7 @@ class ShortcutTask:
 
         # 打印动画：正在录音
         self._status.start()
+        self._indicator.show(self.state.loop)
 
         # 启动识别任务
         recorder = self._get_recorder()
@@ -97,6 +100,7 @@ class ShortcutTask:
         self.is_recording = False
         self.state.stop_recording()
         self._status.stop()
+        self._indicator.hide(self.state.loop)
 
         self.task.cancel()
         self.task = None
@@ -108,6 +112,7 @@ class ShortcutTask:
         self.is_recording = False
         self.state.stop_recording()
         self._status.stop()
+        self._indicator.hide(self.state.loop)
 
         asyncio.run_coroutine_threadsafe(
             self.state.queue_in.put({
