@@ -154,6 +154,11 @@ class RecordingIndicator:
         if self._panel:
             try:
                 self._panel.close()
+                # 刷新 AppKit 事件循环让面板消失
+                from Foundation import NSRunLoop, NSDate
+                NSRunLoop.currentRunLoop().runUntilDate_(
+                    NSDate.dateWithTimeIntervalSinceNow_(0.05)
+                )
             except Exception:
                 pass
             self._panel = None
