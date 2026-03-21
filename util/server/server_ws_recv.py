@@ -178,9 +178,9 @@ async def ws_recv(websocket) -> None:
         console.print("ConnectionClosed...")
         logger.info(f"客户端正常关闭连接: {socket_id}")
         
-    except websockets.ConnectionClosed:
+    except websockets.ConnectionClosed as e:
         console.print("ConnectionClosed...")
-        logger.warning(f"客户端连接已关闭: {socket_id}")
+        logger.warning(f"客户端连接已关闭: {socket_id}, code={e.code}, reason={e.reason or 'none'}")
     except websockets.InvalidState:
         console.print("InvalidState...")
         logger.error(f"WebSocket 状态异常: {socket_id}")

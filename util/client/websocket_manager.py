@@ -77,8 +77,8 @@ class WebSocketManager:
                     url,
                     subprotocols=["binary"],
                     max_size=None,
-                    ping_interval=None,  # 禁用自动 ping（本地连接不需要）
-                    ping_timeout=None,   # 禁用 ping 超时
+                    ping_interval=60,    # 每 60 秒发一次心跳
+                    ping_timeout=300,    # 5 分钟无响应才判断断连
                 )
                 
                 logger.info(f"WebSocket 连接成功: {url}")
@@ -104,24 +104,32 @@ class WebSocketManager:
         Returns:
             发送是否成功
         """
+        # 如果连接断开，先尝试自动重连
         if not self.is_connected:
-            logger.warning("无法发送消息：WebSocket 未连接")
-            return False
-        
+            logger.info("连接已断开，尝试自动重连...")
+            if not await self.connect():
+                logger.warning("自动重连失败，无法发送消息")
+                return False
+            logger.info("自动重连成功")
+
         try:
             await self.state.websocket.send(json.dumps(message))
             return True
-            
-        except ConnectionClosedError:
-            logger.error("发送失败：连接已断开")
+
+        except (ConnectionClosedError, ConnectionClosedOK):
+            logger.warning("发送时连接断开，尝试重连后重发...")
             self.state.websocket = None
+            if await self.connect():
+                try:
+                    await self.state.websocket.send(json.dumps(message))
+                    logger.info("重连后重发成功")
+                    return True
+                except Exception:
+                    logger.error("重连后重发仍失败")
+                    self.state.websocket = None
+                    return False
             return False
-            
-        except ConnectionClosedOK:
-            logger.info("发送失败：连接已正常关闭")
-            self.state.websocket = None
-            return False
-            
+
         except Exception as e:
             logger.error(f"发送消息时发生错误: {e}", exc_info=True)
             return False
