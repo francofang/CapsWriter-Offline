@@ -57,7 +57,7 @@ class ClientConfig:
     
     context = ''                # 提示词上下文，用于辅助 Fun-ASR-Nano 模型识别（例如输入人名、地名、专业术语等）
 
-    trash_punc = '，。,.'       # 识别结果要消除的末尾标点
+    trash_punc = ''             # 识别结果要消除的末尾标点（留空则保留所有标点）
 
     traditional_convert = False     # 是否将识别结果转换为繁体中文
     traditional_locale = 'zh-hant'  # 繁体地区：'zh-hant'（标准繁体）, 'zh-tw'（台湾繁体）, 'zh-hk'（香港繁体）
