@@ -233,10 +233,14 @@ class ShortcutManager:
         def do_restore():
             import time
             time.sleep(0.05)
-            if key == 'caps_lock':
-                controller = kb.Controller()
-                controller.press(kb.Key.caps_lock)
-                controller.release(kb.Key.caps_lock)
+            try:
+                if key == 'caps_lock':
+                    controller = kb.Controller()
+                    controller.press(kb.Key.caps_lock)
+                    controller.release(kb.Key.caps_lock)
+            finally:
+                # 确保 restoring flag 被清除，否则该按键会被永久屏蔽
+                self._restoring_keys.discard(key)
 
         self._pool.submit(do_restore)
 
