@@ -76,7 +76,9 @@ class WebSocketManager:
                 self.state.websocket = await websockets.connect(
                     url,
                     subprotocols=["binary"],
-                    max_size=None
+                    max_size=None,
+                    ping_interval=None,  # 禁用自动 ping（本地连接不需要）
+                    ping_timeout=None,   # 禁用 ping 超时
                 )
                 
                 logger.info(f"WebSocket 连接成功: {url}")

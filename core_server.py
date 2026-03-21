@@ -51,7 +51,9 @@ async def run_websocket_server():
                                 Config.addr,
                                 Config.port,
                                 subprotocols=["binary"],
-                                max_size=None):
+                                max_size=None,
+                                ping_interval=None,
+                                ping_timeout=None):
         
         send_task = asyncio.create_task(ws_send())
         
