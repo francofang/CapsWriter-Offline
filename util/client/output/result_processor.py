@@ -189,19 +189,19 @@ class ResultProcessor:
                         logger.debug("消息处理完成")
                     except asyncio.CancelledError:
                         raise
-                    except ConnectionClosedError as e:
-                        logger.warning(f"WebSocket 连接已关闭: code={e.code}, reason={e.reason or 'none'}")
+                    except ConnectionClosedError:
+                        logger.warning("WebSocket 连接已关闭")
                         break
                     except Exception as e:
                         logger.error(f"处理消息时发生错误: {e}", exc_info=True)
                         raise
 
-        except ConnectionClosedError as e:
-            console.print(f'[red]连接断开 (code={e.code})\n')
-            logger.error(f"WebSocket 连接断开: code={e.code}, reason={e.reason or 'none'}")
-        except ConnectionClosedOK as e:
-            console.print(f'[yellow]连接已正常关闭 (code={e.code})\n')
-            logger.info(f"WebSocket 连接已正常关闭: code={e.code}, reason={e.reason or 'none'}")
+        except ConnectionClosedError:
+            console.print('[red]连接断开\n')
+            logger.error("WebSocket 连接断开")
+        except ConnectionClosedOK:
+            console.print('[yellow]连接已正常关闭\n')
+            logger.info("WebSocket 连接已正常关闭")
         except asyncio.CancelledError:
             logger.info("处理循环被取消")
             raise
