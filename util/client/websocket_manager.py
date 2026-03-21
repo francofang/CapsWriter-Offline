@@ -52,56 +52,47 @@ class WebSocketManager:
     
     async def connect(self) -> bool:
         """
-        建立 WebSocket 连接（带并发保护）
-
-        使用 ClientState 上的 asyncio.Lock 防止多个协程同时重连。
-
+        建立 WebSocket 连接
+        
+        尝试连接到配置的服务端地址，如果失败会自动重试。
+        
         Returns:
             连接是否成功
         """
+        # 如果已连接，直接返回
         if self.is_connected:
             return True
-
-        lock = self.state.ws_connect_lock
-        if lock is None:
-            import asyncio
-            lock = asyncio.Lock()
-            self.state.ws_connect_lock = lock
-
-        async with lock:
-            # 拿到锁后再检查一次（可能其他协程已经连好了）
-            if self.is_connected:
-                return True
-
-            if self.state.websocket is not None:
-                self.state.websocket = None
-
-            url = f"ws://{Config.addr}:{Config.port}"
-
-            for attempt in range(1, self.max_retries + 1):
-                try:
-                    logger.debug(f"正在连接服务端 {url} (尝试 {attempt}/{self.max_retries})")
-
-                    self.state.websocket = await websockets.connect(
-                        url,
-                        subprotocols=["binary"],
-                        max_size=None,
-                        ping_interval=60,
-                        ping_timeout=300,
-                    )
-
-                    logger.info(f"WebSocket 连接成功: {url}")
-                    return True
+        
+        # 清理旧连接
+        if self.state.websocket is not None:
+            self.state.websocket = None
+        
+        url = f"ws://{Config.addr}:{Config.port}"
+        
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                logger.debug(f"正在连接服务端 {url} (尝试 {attempt}/{self.max_retries})")
                 
-                except ConnectionRefusedError:
-                    logger.warning(f"连接被拒绝 (尝试 {attempt}/{self.max_retries})")
-                except TimeoutError:
-                    logger.warning(f"连接超时 (尝试 {attempt}/{self.max_retries})")
-                except Exception as e:
-                    logger.error(f"连接失败: {e} (尝试 {attempt}/{self.max_retries})")
-
-            logger.error(f"无法连接到服务端 {url}，已重试 {self.max_retries} 次")
-            return False
+                self.state.websocket = await websockets.connect(
+                    url,
+                    subprotocols=["binary"],
+                    max_size=None,
+                    ping_interval=60,    # 每 60 秒发一次心跳
+                    ping_timeout=300,    # 5 分钟无响应才判断断连
+                )
+                
+                logger.info(f"WebSocket 连接成功: {url}")
+                return True
+                
+            except ConnectionRefusedError:
+                logger.warning(f"连接被拒绝 (尝试 {attempt}/{self.max_retries})")
+            except TimeoutError:
+                logger.warning(f"连接超时 (尝试 {attempt}/{self.max_retries})")
+            except Exception as e:
+                logger.error(f"连接失败: {e} (尝试 {attempt}/{self.max_retries})")
+        
+        logger.error(f"无法连接到服务端 {url}，已重试 {self.max_retries} 次")
+        return False
     
     async def send(self, message: dict) -> bool:
         """

@@ -70,9 +70,6 @@ class ClientState:
     recording_start_time: float = 0.0
     audio_files: Dict[str, Path] = field(default_factory=dict)
 
-    # WebSocket 重连锁（防止并发重连创建多个连接）
-    ws_connect_lock: Optional[asyncio.Lock] = None
-
     # 最近一次识别结果（用于手动添加纠错记录）
     last_recognition_text: Optional[str] = None
     
@@ -88,7 +85,6 @@ class ClientState:
         self.loop = asyncio.get_event_loop()
         self.queue_in = asyncio.Queue()
         self.queue_out = asyncio.Queue()
-        self.ws_connect_lock = asyncio.Lock()
         logger.debug("客户端状态已初始化")
     
     def reset(self) -> None:
