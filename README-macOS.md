@@ -88,14 +88,15 @@ brew install portaudio protobuf ffmpeg git cmake python-tk@3.12
 ### 2. 克隆仓库
 
 ```bash
-cd ~/Projects
 git clone -b macos-port https://github.com/francofang/CapsWriter-Offline.git capswriter-mac
+cd capswriter-mac
 ```
 
 ### 3. 创建 Python 虚拟环境
 
+在仓库根目录下执行：
+
 ```bash
-cd ~/Projects/capswriter-mac
 python3.12 -m venv venv
 source venv/bin/activate
 ```
@@ -120,8 +121,8 @@ curl -L -o /tmp/llama.tar.gz \
 
 cd /tmp && mkdir -p llama_extract && tar xzf llama.tar.gz -C llama_extract
 
-# 复制到项目的 3 个 bin 目录
-cd ~/Projects/capswriter-mac/CapsWriter-Offline
+# 回到仓库根目录，复制到项目的 3 个 bin 目录
+cd capswriter-mac  # 如果还在仓库根目录则跳过此行
 for dest in \
   util/fun_asr_gguf/inference/bin \
   util/qwen_asr_gguf/inference/bin \
@@ -172,14 +173,12 @@ models/Fun-ASR-Nano/Fun-ASR-Nano-GGUF/
 ### 分开启动
 
 ```bash
-# 终端 Tab 1：启动服务端
-cd ~/Projects/capswriter-mac/CapsWriter-Offline
-source ../venv/bin/activate
+# 终端 Tab 1：启动服务端（在仓库根目录执行）
+source venv/bin/activate
 python core_server.py
 
 # 终端 Tab 2：启动客户端（等服务端显示「开始服务」后）
-cd ~/Projects/capswriter-mac/CapsWriter-Offline
-source ../venv/bin/activate
+source venv/bin/activate
 python core_client.py
 ```
 
