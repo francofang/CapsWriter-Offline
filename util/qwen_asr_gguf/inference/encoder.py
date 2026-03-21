@@ -133,9 +133,12 @@ class QwenAudioEncoder:
         sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         
         providers = ['CPUExecutionProvider']
-        if use_dml and 'DmlExecutionProvider' in ort.get_available_providers():
-            providers.insert(0, 'DmlExecutionProvider') 
+        available = ort.get_available_providers()
+        if use_dml and 'DmlExecutionProvider' in available:
+            providers.insert(0, 'DmlExecutionProvider')
             self.active_dml = True
+        elif 'CoreMLExecutionProvider' in available:
+            providers.insert(0, 'CoreMLExecutionProvider')
             
         if self.verbose: 
             print(f"--- [Encoder] 加载 Split ONNX 模型 (DML: {self.active_dml}, Pad: {pad_to}s) ---")
