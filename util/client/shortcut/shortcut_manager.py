@@ -94,41 +94,47 @@ class ShortcutManager:
 
     def _on_key_press(self, key):
         """macOS 键盘按下回调"""
-        key_name = pynput_key_to_name(key)
-        if not key_name:
-            return
+        try:
+            key_name = pynput_key_to_name(key)
+            if not key_name:
+                return
 
-        # 防自捕获
-        if key_name in self._emulating_pressed:
-            return
-        if key_name in self._restoring_keys:
-            return
+            # 防自捕获
+            if key_name in self._emulating_pressed:
+                return
+            if key_name in self._restoring_keys:
+                return
 
-        if key_name not in self.tasks:
-            return
+            if key_name not in self.tasks:
+                return
 
-        task = self.tasks[key_name]
-        self._event_handler.handle_keydown(key_name, task)
+            task = self.tasks[key_name]
+            self._event_handler.handle_keydown(key_name, task)
+        except Exception as e:
+            logger.error(f"键盘按下回调异常: {e}", exc_info=True)
 
     def _on_key_release(self, key):
         """macOS 键盘释放回调"""
-        key_name = pynput_key_to_name(key)
-        if not key_name:
-            return
+        try:
+            key_name = pynput_key_to_name(key)
+            if not key_name:
+                return
 
-        # 防自捕获 —— 释放时清除标志
-        if key_name in self._emulating_pressed:
-            self._emulating_pressed.discard(key_name)
-            return
-        if key_name in self._restoring_keys:
-            self._restoring_keys.discard(key_name)
-            return
+            # 防自捕获 —— 释放时清除标志
+            if key_name in self._emulating_pressed:
+                self._emulating_pressed.discard(key_name)
+                return
+            if key_name in self._restoring_keys:
+                self._restoring_keys.discard(key_name)
+                return
 
-        if key_name not in self.tasks:
-            return
+            if key_name not in self.tasks:
+                return
 
-        task = self.tasks[key_name]
-        self._event_handler.handle_keyup(key_name, task)
+            task = self.tasks[key_name]
+            self._event_handler.handle_keyup(key_name, task)
+        except Exception as e:
+            logger.error(f"键盘释放回调异常: {e}", exc_info=True)
 
     # ========== Windows: win32_event_filter 回调 ==========
 
