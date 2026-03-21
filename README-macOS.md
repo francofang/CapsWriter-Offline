@@ -100,12 +100,13 @@ python3.12 -m venv venv
 source venv/bin/activate
 ```
 
-安装依赖（注意：macOS 用 `onnxruntime`，不是 Windows 的 `onnxruntime-directml`）：
+安装依赖（使用 macOS 专用依赖文件）：
 
 ```bash
-pip install sherpa-onnx numpy gguf onnxruntime rich websockets watchdog \
-    pypinyin pystray Pillow markdown tkhtmlview srt pynput pyclip sounddevice
+pip install -r CapsWriter-Offline/requirements-macos.txt
 ```
+
+> 注意：macOS 用 `onnxruntime`（标准版），不是 Windows 的 `onnxruntime-directml`。原项目的 `requirements-server.txt` 和 `requirements-client.txt` 是 Windows 取向的，macOS 请使用 `requirements-macos.txt`。
 
 ### 4. 下载 llama.cpp 动态库
 

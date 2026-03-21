@@ -67,15 +67,19 @@ class RecordingIndicator:
             return
 
         try:
-            from AppKit import (
-                NSApplication, NSApplicationActivationPolicyAccessory,
-                NSPanel, NSFloatingWindowLevel,
-                NSWindowStyleMaskNonactivatingPanel, NSWindowStyleMaskBorderless,
-                NSBackingStoreBuffered,
-                NSTextField, NSFont, NSColor, NSMakeRect,
-                NSView, NSScreen,
-            )
-            from Quartz import CGEventGetLocation, CGEventCreate
+            try:
+                from AppKit import (
+                    NSApplication, NSApplicationActivationPolicyAccessory,
+                    NSPanel, NSFloatingWindowLevel,
+                    NSWindowStyleMaskNonactivatingPanel, NSWindowStyleMaskBorderless,
+                    NSBackingStoreBuffered,
+                    NSTextField, NSFont, NSColor, NSMakeRect,
+                    NSView, NSScreen,
+                )
+                from Quartz import CGEventGetLocation, CGEventCreate
+            except ImportError:
+                logger.warning("录音指示器需要 PyObjC，请运行: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
+                return
 
             # 防止 Python 出现在 Dock
             app = NSApplication.sharedApplication()

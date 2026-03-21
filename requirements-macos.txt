@@ -1,0 +1,40 @@
+# CapsWriter-Offline macOS (Apple Silicon) 依赖
+# 使用方法: pip install -r requirements-macos.txt
+
+# ASR 核心
+sherpa-onnx
+numpy
+gguf
+onnxruntime                     # macOS 用标准版，不是 onnxruntime-directml
+
+# 基础组件
+rich
+typer
+colorama
+websockets
+watchdog
+pypinyin
+srt
+markdown
+
+# 系统交互（macOS 专用）
+pynput                          # 全局快捷键（替代 Windows 的 keyboard 库）
+pyclip                          # 剪贴板操作
+sounddevice                     # 音频录制
+
+# macOS 原生 API（录音指示器等）
+pyobjc-framework-Cocoa
+pyobjc-framework-Quartz
+
+# 托盘和 UI
+pystray
+Pillow
+tkhtmlview
+
+# LLM 角色（可选，不装也能用基础语音输入）
+openai
+ollama
+httpx
+
+# 数值计算
+numba

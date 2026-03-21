@@ -196,4 +196,4 @@ file_*.txt
 release
 *.dll
 *.dylib
-*.exe
+*.exe.DS_Store

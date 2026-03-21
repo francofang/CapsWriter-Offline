@@ -93,8 +93,11 @@ class AudioEncoder:
         session_opts.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         
         providers = ['CPUExecutionProvider']
-        if self.dml_enable and 'DmlExecutionProvider' in onnxruntime.get_available_providers():
-            providers.insert(0, 'DmlExecutionProvider') 
+        available = onnxruntime.get_available_providers()
+        if self.dml_enable and 'DmlExecutionProvider' in available:
+            providers.insert(0, 'DmlExecutionProvider')
+        elif 'CoreMLExecutionProvider' in available:
+            providers.insert(0, 'CoreMLExecutionProvider')
         
         logger.info(f"[Encoder] 加载模型: {os.path.basename(self.model_path)} (Providers: {providers})")
         
