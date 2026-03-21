@@ -53,35 +53,36 @@ class AudioRecorder:
         self._cache: list = []
     
     async def _send_message(self, message: dict) -> None:
-        """发送消息到服务端"""
+        """发送消息到服务端，连接断开时自动重连"""
         websocket = self.state.websocket
-        
-        if websocket is None:
-            if message['is_final']:
-                self.state.pop_audio_file(message['task_id'])
-                console.print('    服务端未连接，无法发送\n')
-                logger.warning("服务端未连接，无法发送音频数据")
-            return
-        
-        try:
-            if hasattr(websocket, 'closed') and websocket.closed:
+
+        # 连接不存在或已关闭 → 尝试自动重连
+        if websocket is None or (hasattr(websocket, 'closed') and websocket.closed):
+            self.state.websocket = None
+            from util.client.websocket_manager import WebSocketManager
+            ws_manager = WebSocketManager(self.state)
+            logger.info("音频发送前检测到连接断开，尝试自动重连...")
+            if await ws_manager.connect():
+                logger.info("自动重连成功")
+                websocket = self.state.websocket
+            else:
                 if message['is_final']:
                     self.state.pop_audio_file(message['task_id'])
-                    console.print('    服务端连接已关闭\n')
-                    logger.error("服务端连接已关闭")
+                    console.print('    服务端未连接，无法发送\n')
+                    logger.warning("服务端未连接且重连失败，无法发送音频数据")
                 return
-            
+
+        try:
             await websocket.send(json.dumps(message))
-            
-        except websockets.ConnectionClosedError:
+
+        except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
+            code = getattr(e, 'code', 'unknown')
+            reason = getattr(e, 'reason', 'none')
+            logger.warning(f"发送时连接断开: code={code}, reason={reason}")
+            self.state.websocket = None
             if message['is_final']:
                 self.state.pop_audio_file(message['task_id'])
-                console.print('[red]连接中断了')
-                logger.error("WebSocket 连接中断")
-        except websockets.ConnectionClosedOK:
-            if message['is_final']:
-                self.state.pop_audio_file(message['task_id'])
-                console.print('[yellow]连接已正常关闭')
+                console.print(f'[red]连接中断 (code={code})')
                 logger.info("WebSocket 连接已正常关闭")
         except Exception as e:
             logger.error(f"发送音频数据时发生错误: {e}", exc_info=True)

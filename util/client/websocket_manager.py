@@ -116,8 +116,8 @@ class WebSocketManager:
             await self.state.websocket.send(json.dumps(message))
             return True
 
-        except (ConnectionClosedError, ConnectionClosedOK):
-            logger.warning("发送时连接断开，尝试重连后重发...")
+        except (ConnectionClosedError, ConnectionClosedOK) as e:
+            logger.warning(f"发送时连接断开 (code={e.code}, reason={e.reason or 'none'})，尝试重连后重发...")
             self.state.websocket = None
             if await self.connect():
                 try:
