@@ -103,7 +103,7 @@ source venv/bin/activate
 安装依赖（使用 macOS 专用依赖文件）：
 
 ```bash
-pip install -r CapsWriter-Offline/requirements-macos.txt
+pip install -r requirements-macos.txt
 ```
 
 > 注意：macOS 用 `onnxruntime`（标准版），不是 Windows 的 `onnxruntime-directml`。原项目的 `requirements-server.txt` 和 `requirements-client.txt` 是 Windows 取向的，macOS 请使用 `requirements-macos.txt`。
