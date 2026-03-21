@@ -23,6 +23,9 @@ else
         tell application "System Events" to keystroke "t" using command down
         delay 0.5
         do script "cd ~/Projects/capswriter-mac && source venv/bin/activate && cd CapsWriter-Offline && sleep 3 && python core_client.py; exit" in front window
+        -- 启动后最小化 Terminal 窗口
+        delay 0.5
+        set miniaturized of front window to true
     end tell
     '
 fi
