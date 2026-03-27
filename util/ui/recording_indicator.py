@@ -128,7 +128,7 @@ class RecordingIndicator:
             panel.setContentView_(content)
 
             # 创建竖线（用 NSView + layer 背景色）
-            bar_color = NSColor.colorWithRed_green_blue_alpha_(0.0, 0.85, 1.0, 0.9)
+            bar_color = NSColor.colorWithRed_green_blue_alpha_(1.0, 0.6, 0.0, 0.9)
             bar_views = []
             for i in range(BAR_COUNT):
                 bx = PANEL_PADDING + i * (BAR_WIDTH + BAR_GAP)
