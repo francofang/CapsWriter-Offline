@@ -98,19 +98,14 @@ class RecordingIndicator:
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-            # 放在 Dock 正上方、屏幕水平居中
-            screen_frame = NSScreen.mainScreen().frame()
-            visible_frame = NSScreen.mainScreen().visibleFrame()
+            # 放在鼠标光标（输入焦点）正上方
+            screen_h = NSScreen.mainScreen().frame().size.height
 
-            # visibleFrame 不包含 Dock 和菜单栏
-            # Dock 在底部时，visibleFrame.origin.y 就是 Dock 顶部
-            x = (screen_frame.size.width - PANEL_W) / 2
-            y = visible_frame.origin.y + 8  # Dock 上方 8px
-
-            # 获取鼠标位置（仅用于日志）
             event = CGEventCreate(None)
             mouse = CGEventGetLocation(event)
-            screen_h = screen_frame.size.height
+
+            x = mouse.x - PANEL_W / 2
+            y = screen_h - mouse.y + 5  # 鼠标上方 5px（AppKit 坐标系）
 
             # 创建面板
             panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
