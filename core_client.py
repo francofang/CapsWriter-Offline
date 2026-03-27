@@ -204,9 +204,33 @@ def _disable_app_nap():
         return None
 
 
+def _enable_faulthandler():
+    """启用 faulthandler，假死时可用 kill -SIGUSR1 <pid> 触发诊断"""
+    import faulthandler
+    import signal
+    import os
+    from pathlib import Path
+
+    log_dir = Path(__file__).parent / 'logs'
+    log_dir.mkdir(exist_ok=True)
+    fh_path = log_dir / 'faulthandler.log'
+
+    fh_file = open(fh_path, 'w')
+    # 手动触发：kill -SIGUSR1 <pid>
+    faulthandler.register(signal.SIGUSR1, file=fh_file, all_threads=True)
+    # 自动定时 dump：每 120 秒写一次，覆盖上一次（只保留最新快照）
+    faulthandler.dump_traceback_later(timeout=120, repeat=True, file=fh_file)
+
+    logger.info(f"faulthandler 已启用, PID={os.getpid()}, 日志: {fh_path}")
+    logger.info(f"假死时请在另一个终端运行: kill -SIGUSR1 {os.getpid()}")
+
+
 def init_mic() -> None:
     """初始化并运行麦克风模式"""
     from util.client.state import console
+
+    # 启用 faulthandler（GIL 卡死时的诊断）
+    _enable_faulthandler()
 
     # 禁用 App Nap，防止后台假死
     _activity = _disable_app_nap()
