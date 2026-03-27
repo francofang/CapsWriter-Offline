@@ -54,7 +54,7 @@ class RecordingIndicator:
         Args:
             rms: 音频 RMS 值（0.0 ~ 1.0 范围，通常 0 ~ 0.3）
         """
-        normalized = min(1.0, rms * 4.0)
+        normalized = min(1.0, rms * 12.0)
         self._levels.append(normalized)
 
     def show(self, loop: asyncio.AbstractEventLoop) -> None:
