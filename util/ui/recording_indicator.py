@@ -1,7 +1,7 @@
 """
 录音状态浮动指示器（macOS NSPanel 波形方案）
 
-使用 NSPanel + 自定义 NSView 绘制实时音量波形条。
+使用 NSPanel + NSView 绘制实时音量波形条。
 圆角胶囊形状，内部竖线随说话音量变化。
 """
 import asyncio
@@ -44,10 +44,9 @@ class RecordingIndicator:
             return
         self._initialized = True
         self._panel = None
-        self._bar_layers = []
+        self._bar_views = []
         self._levels = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
         self._animation_task: Optional[asyncio.Task] = None
-        self._content_view = None
 
     def update_level(self, rms: float) -> None:
         """更新音量级别（从音频回调线程调用，线程安全）
@@ -55,7 +54,6 @@ class RecordingIndicator:
         Args:
             rms: 音频 RMS 值（0.0 ~ 1.0 范围，通常 0 ~ 0.3）
         """
-        # 归一化：RMS 通常 0~0.3，映射到 0~1
         normalized = min(1.0, rms * 4.0)
         self._levels.append(normalized)
 
@@ -92,7 +90,6 @@ class RecordingIndicator:
                     NSColor, NSMakeRect, NSView, NSScreen,
                 )
                 from Quartz import CGEventGetLocation, CGEventCreate
-                import objc
             except ImportError:
                 logger.warning("录音指示器需要 PyObjC，请运行: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
                 return
@@ -130,19 +127,18 @@ class RecordingIndicator:
             )
             panel.setContentView_(content)
 
-            # 创建竖线 (CALayer)
-            from QuartzCore import CALayer
-            bar_layers = []
+            # 创建竖线（用 NSView + layer 背景色）
+            bar_color = NSColor.colorWithRed_green_blue_alpha_(0.0, 0.85, 1.0, 0.9)
+            bar_views = []
             for i in range(BAR_COUNT):
-                bar = CALayer.alloc().init()
                 bx = PANEL_PADDING + i * (BAR_WIDTH + BAR_GAP)
-                bar.setFrame_(((bx, (PANEL_H - BAR_MIN_H) / 2), (BAR_WIDTH, BAR_MIN_H)))
-                bar.setCornerRadius_(BAR_WIDTH / 2)
-                bar.setBackgroundColor_(
-                    NSColor.colorWithRed_green_blue_alpha_(0.0, 0.85, 1.0, 0.9).CGColor()
-                )
-                content.layer().addSublayer_(bar)
-                bar_layers.append(bar)
+                by = (PANEL_H - BAR_MIN_H) / 2
+                bar = NSView.alloc().initWithFrame_(NSMakeRect(bx, by, BAR_WIDTH, BAR_MIN_H))
+                bar.setWantsLayer_(True)
+                bar.layer().setCornerRadius_(BAR_WIDTH / 2)
+                bar.layer().setBackgroundColor_(bar_color.CGColor())
+                content.addSubview_(bar)
+                bar_views.append(bar)
 
             # 显示面板
             panel.setIsVisible_(True)
@@ -155,9 +151,7 @@ class RecordingIndicator:
             )
 
             self._panel = panel
-            self._content_view = content
-            self._bar_layers = bar_layers
-            # 重置音量数据
+            self._bar_views = bar_views
             self._levels = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
 
             logger.info(
@@ -189,33 +183,26 @@ class RecordingIndicator:
             except Exception:
                 pass
             self._panel = None
-            self._bar_layers = []
-            self._content_view = None
+            self._bar_views = []
 
     async def _update_loop(self) -> None:
         """波形更新循环"""
         from Foundation import NSRunLoop, NSDate
-        from QuartzCore import CATransaction
+        from AppKit import NSMakeRect
 
         try:
             while True:
                 await asyncio.sleep(UPDATE_INTERVAL)
-                if not self._bar_layers:
+                if not self._bar_views:
                     break
 
-                # 关闭隐式动画，避免竖线变化时有延迟过渡效果
-                CATransaction.begin()
-                CATransaction.setDisableActions_(True)
-
                 levels = list(self._levels)
-                for i, bar in enumerate(self._bar_layers):
+                for i, bar in enumerate(self._bar_views):
                     level = levels[i] if i < len(levels) else 0.0
                     h = BAR_MIN_H + level * (BAR_MAX_H - BAR_MIN_H)
                     bx = PANEL_PADDING + i * (BAR_WIDTH + BAR_GAP)
                     by = (PANEL_H - h) / 2
-                    bar.setFrame_(((bx, by), (BAR_WIDTH, h)))
-
-                CATransaction.commit()
+                    bar.setFrame_(NSMakeRect(bx, by, BAR_WIDTH, h))
 
                 # 刷新渲染
                 NSRunLoop.currentRunLoop().runUntilDate_(
