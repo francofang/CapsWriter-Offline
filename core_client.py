@@ -215,10 +215,10 @@ def _enable_faulthandler():
     log_dir.mkdir(exist_ok=True)
     fh_path = log_dir / 'faulthandler.log'
 
-    fh_file = open(fh_path, 'w')
+    fh_file = open(fh_path, 'a')
     # 手动触发：kill -SIGUSR1 <pid>
     faulthandler.register(signal.SIGUSR1, file=fh_file, all_threads=True)
-    # 自动定时 dump：每 120 秒写一次，覆盖上一次（只保留最新快照）
+    # 自动定时 dump：每 120 秒追加一次
     faulthandler.dump_traceback_later(timeout=120, repeat=True, file=fh_file)
 
     logger.info(f"faulthandler 已启用, PID={os.getpid()}, 日志: {fh_path}")
