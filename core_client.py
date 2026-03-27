@@ -89,25 +89,42 @@ async def main_mic() -> None:
     # 初始化所有组件
     _state = setup_client_components(BASE_DIR)
 
-    # 接收结果（process_loop 内置自动重连，只在退出信号时才结束）
+    # 接收结果
     try:
         processor = ResultProcessor(_state)
-        _state.processor = processor
+        _state.processor = processor # 注入状态以便清理
 
-        process_task = asyncio.create_task(processor.process_loop())
-        wait_shutdown = asyncio.create_task(lifecycle.wait_for_shutdown())
+        # 主循环：只要没收到退出信号，就一直运行
+        while not lifecycle.is_shutting_down:
+            # 创建处理任务
+            process_task = asyncio.create_task(processor.process_loop())
+            # 创建等待退出任务
+            wait_shutdown = asyncio.create_task(lifecycle.wait_for_shutdown())
 
-        done, pending = await asyncio.wait(
-            [process_task, wait_shutdown],
-            return_when=asyncio.FIRST_COMPLETED
-        )
+            done, pending = await asyncio.wait(
+                [process_task, wait_shutdown],
+                return_when=asyncio.FIRST_COMPLETED
+            )
 
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            # 如果收到退出信号
+            if wait_shutdown in done:
+                logger.info("主循环检测到退出信号")
+                process_task.cancel() # 取消正在进行的处理
+                break
+            
+            # 如果处理任务结束（无论是正常还是异常），继续下一轮
+            # 但 ResultProcessor 应该是一个无限循环，除非出错
+            if process_task in done:
+                # 检查是否有关闭请求（可能是 processor 内部触发）
+                if lifecycle.is_shutting_down:
+                    break
+                # 如果没有请求退出但任务结束了，可能是异常
+                try:
+                    await process_task
+                except Exception as e:
+                    logger.error(f"处理循环异常: {e}")
+                    # 防止死循环打印日志
+                    await asyncio.sleep(1)
 
     except asyncio.CancelledError:
         logger.info("主任务被取消，正在退出...")
@@ -115,6 +132,10 @@ async def main_mic() -> None:
     except Exception as e:
         logger.error(f"接收结果时发生错误: {e}", exc_info=True)
         raise
+    finally:
+        # 这里的 finally 主要是为了 handle 协程内的局部资源
+        # 全局资源清理交给 lifecycle
+        pass
 
 
 async def main_file(files: List[Path]) -> None:

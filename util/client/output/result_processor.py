@@ -126,72 +126,88 @@ class ResultProcessor:
             logger.debug(f"检测按键状态失败: {e}")
     
     async def process_loop(self) -> None:
-        """主处理循环（内置自动重连）"""
+        """主处理循环"""
+        if not await self._ws_manager.connect():
+            logger.warning("WebSocket 连接检查失败")
+            return
+
+        console.print('[green]连接成功\n')
+        logger.info("WebSocket 连接成功")
+
         try:
-            while not self._exit_event.is_set() and not lifecycle.is_shutting_down:
-                # 阶段1: 连接
-                if not await self._ws_manager.connect():
-                    console.print('[yellow]连接失败，5秒后重试...')
-                    logger.warning("WebSocket 连接失败，等待重试")
+            while True:
+                # 检查退出事件
+                if self._exit_event.is_set():
+                    logger.info("检测到退出事件，停止处理循环")
+                    break
+
+                # 创建一个任务来接收消息
+                recv_task = asyncio.create_task(self.state.websocket.recv())
+                logger.debug("已创建接收消息任务")
+
+                # 创建一个任务来等待退出事件
+                exit_wait_task = asyncio.create_task(self._exit_event.wait())
+                logger.debug("已创建退出等待任务")
+
+                # 等待任意一个任务完成
+                done, pending = await asyncio.wait(
+                    [recv_task, exit_wait_task],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                logger.debug(f"任务完成: done={len(done)}, pending={len(pending)}")
+
+                # 取消未完成的任务
+                for task in pending:
+                    task.cancel()
                     try:
-                        await asyncio.wait_for(self._exit_event.wait(), timeout=5.0)
-                        break  # 收到退出信号
-                    except asyncio.TimeoutError:
-                        continue  # 重试连接
+                        await task
+                    except asyncio.CancelledError:
+                        pass
 
-                console.print('[green]连接成功\n')
-                logger.info("WebSocket 连接成功")
+                # 检查是否是退出请求
+                if exit_wait_task in done:
+                    logger.info("收到退出请求，停止处理循环")
+                    # 取消接收任务
+                    if recv_task not in done and not recv_task.done():
+                        recv_task.cancel()
+                        try:
+                            await recv_task
+                        except asyncio.CancelledError:
+                            pass
+                    break
 
-                # 阶段2: 接收消息循环
-                try:
-                    while not self._exit_event.is_set() and not lifecycle.is_shutting_down:
-                        recv_task = asyncio.create_task(self.state.websocket.recv())
-                        exit_wait_task = asyncio.create_task(self._exit_event.wait())
-
-                        done, pending = await asyncio.wait(
-                            [recv_task, exit_wait_task],
-                            return_when=asyncio.FIRST_COMPLETED
-                        )
-
-                        # 取消未完成的任务
-                        for task in pending:
-                            task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
-
-                        # 退出请求
-                        if exit_wait_task in done:
-                            logger.info("收到退出请求，停止处理循环")
+                # 如果是接收任务完成，处理消息
+                if recv_task in done:
+                    try:
+                        message = recv_task.result()
+                        # 再次检查退出标志
+                        if lifecycle.is_shutting_down:
+                            logger.info("处理消息前检测到退出请求")
                             break
+                        logger.debug("开始处理消息")
+                        await self._handle_message(message)
+                        logger.debug("消息处理完成")
+                    except asyncio.CancelledError:
+                        raise
+                    except ConnectionClosedError:
+                        logger.warning("WebSocket 连接已关闭")
+                        break
+                    except Exception as e:
+                        logger.error(f"处理消息时发生错误: {e}", exc_info=True)
+                        raise
 
-                        # 接收到消息
-                        if recv_task in done:
-                            message = recv_task.result()
-                            if lifecycle.is_shutting_down:
-                                break
-                            await self._handle_message(message)
-
-                except (ConnectionClosedError, ConnectionClosedOK):
-                    console.print('[yellow]连接断开，正在重连...\n')
-                    logger.warning("WebSocket 连接断开，将自动重连")
-                    self.state.websocket = None
-                    await asyncio.sleep(1)
-                    continue  # 回到外层 while → 重新连接
-
-                except asyncio.CancelledError:
-                    raise
-
-                except Exception as e:
-                    logger.error(f"接收消息时发生错误: {e}", exc_info=True)
-                    self.state.websocket = None
-                    await asyncio.sleep(1)
-                    continue
-
+        except ConnectionClosedError:
+            console.print('[red]连接断开\n')
+            logger.error("WebSocket 连接断开")
+        except ConnectionClosedOK:
+            console.print('[yellow]连接已正常关闭\n')
+            logger.info("WebSocket 连接已正常关闭")
         except asyncio.CancelledError:
             logger.info("处理循环被取消")
             raise
+        except Exception as e:
+            logger.error(f"接收结果时发生错误: {e}", exc_info=True)
+            print(e)
         finally:
             self._cleanup()
 
