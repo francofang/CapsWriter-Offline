@@ -64,15 +64,18 @@ def on_stop_pressed():
     logger.debug("检测到 ESC 键按下，停止 LLM 输出")
     _stop_event.set()
 
-    # 如果有 toast，关闭它
-    try:
-        from util.ui.toast import ToastMessageManager
-        toast_manager = ToastMessageManager()
-        # 注意：close_last_toast() 方法不存在，这里先注释掉
-        # TODO: 实现关闭最后一个 toast 的逻辑
-        # toast_manager.close_last_toast()
-    except Exception as e:
-        logger.warning(f"关闭 toast 失败: {e}")
+    # [macOS 不兼容] 以下代码在 pynput 回调线程中创建 ToastMessageManager，
+    # 会触发 Tkinter Tk() 初始化。macOS 要求 Tk 必须在主线程初始化，
+    # 从非主线程调用会导致 GIL 死锁，表现为整个客户端假死。
+    # 原始功能（关闭 toast）本身也未实现（close_last_toast 不存在）。
+    # 如需恢复，应通过 asyncio.run_coroutine_threadsafe 派发到主线程执行。
+    #
+    # try:
+    #     from util.ui.toast import ToastMessageManager
+    #     toast_manager = ToastMessageManager()
+    #     toast_manager.close_last_toast()
+    # except Exception as e:
+    #     logger.warning(f"关闭 toast 失败: {e}")
 
 
 def start_monitor():
