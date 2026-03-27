@@ -152,6 +152,11 @@ def setup_client_components(base_dir):
     if system() == 'Windows':
         empty_current_working_set()
 
+    # 启动 pynput 监听器健康监控（macOS 诊断用）
+    if system() == 'Darwin':
+        from util.client.shortcut.listener_monitor import start as start_monitor
+        start_monitor(interval=30)
+
     logger.info("客户端初始化完成，等待语音输入...")
     return state
 
