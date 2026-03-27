@@ -94,9 +94,6 @@ class ShortcutManager:
 
     def _on_key_press(self, key):
         """macOS 键盘按下回调"""
-        from util.client.shortcut.listener_monitor import on_event
-        on_event()
-
         key_name = pynput_key_to_name(key)
         if not key_name:
             return
@@ -115,9 +112,6 @@ class ShortcutManager:
 
     def _on_key_release(self, key):
         """macOS 键盘释放回调"""
-        from util.client.shortcut.listener_monitor import on_event
-        on_event()
-
         key_name = pynput_key_to_name(key)
         if not key_name:
             return
@@ -294,10 +288,6 @@ class ShortcutManager:
                     on_press=self._on_key_press,
                     on_release=self._on_key_release,
                 )
-                # 注册监控（必须在 start 之前）
-                from util.client.shortcut.listener_monitor import register_listener
-                register_listener('ShortcutManager', self.keyboard_listener)
-
             self.keyboard_listener.start()
             logger.info("键盘监听器已启动")
 

@@ -122,11 +122,6 @@ class GlobalHotkeyManager:
         
         try:
             self._listener = keyboard.GlobalHotKeys(self._hotkeys)
-            # 注册监控（必须在 start 之前）
-            import sys
-            if sys.platform == 'darwin':
-                from util.client.shortcut.listener_monitor import register_listener
-                register_listener('GlobalHotKeys', self._listener)
             self._listener.start()
             logger.debug(f"GlobalHotKeys 监听器已启动: {list(self._hotkeys.keys())}")
         except Exception as e:
