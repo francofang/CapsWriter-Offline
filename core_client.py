@@ -187,9 +187,29 @@ async def main_file(files: List[Path]) -> None:
     input('\n按回车退出\n')
 
 
+def _disable_app_nap():
+    """禁用 macOS App Nap，防止后台进程被节流导致热键失效和连接断开"""
+    if system() != 'Darwin':
+        return None
+    try:
+        from Foundation import NSProcessInfo
+        activity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            0x00FFFFFF & ~(1 << 20),  # NSActivityUserInitiatedAllowingIdleSystemSleep
+            "CapsWriter 需要持续监听键盘事件"
+        )
+        logger.info("已禁用 App Nap")
+        return activity
+    except ImportError:
+        logger.warning("PyObjC 未安装，无法禁用 App Nap")
+        return None
+
+
 def init_mic() -> None:
     """初始化并运行麦克风模式"""
     from util.client.state import console
+
+    # 禁用 App Nap，防止后台假死
+    _activity = _disable_app_nap()
 
     # 注册清理函数
     lifecycle.register_on_shutdown(cleanup_client_resources)
