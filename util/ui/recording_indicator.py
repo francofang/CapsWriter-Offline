@@ -1,30 +1,34 @@
 """
-录音状态浮动指示器（macOS NSPanel 方案）
+录音状态浮动指示器（macOS NSPanel 波形方案）
 
-使用 NSPanel + NSWindowStyleMaskNonactivatingPanel 创建不抢焦点的浮动窗口。
-这是 macOS 原生语音输入法使用的技术。
+使用 NSPanel + 自定义 NSView 绘制实时音量波形条。
+圆角胶囊形状，内部竖线随说话音量变化。
 """
 import asyncio
 import sys
+from collections import deque
 from typing import Optional
 
 from . import logger
 
-# 动画帧
-ANIMATION_FRAMES = [
-    '∙∙∙  录音中',
-    '●∙∙  录音中',
-    '∙●∙  录音中',
-    '∙∙●  录音中',
-]
-ANIMATION_INTERVAL = 0.15  # 150ms/帧
+# 波形参数
+BAR_COUNT = 24         # 竖线数量
+BAR_WIDTH = 3          # 竖线宽度
+BAR_GAP = 2            # 竖线间距
+BAR_MIN_H = 4          # 最小高度（静音时）
+BAR_MAX_H = 24         # 最大高度
+PANEL_PADDING = 8      # 内边距
+PANEL_H = 32           # 面板高度
+PANEL_W = PANEL_PADDING * 2 + BAR_COUNT * (BAR_WIDTH + BAR_GAP) - BAR_GAP
+CORNER_RADIUS = PANEL_H / 2  # 胶囊形
+UPDATE_INTERVAL = 0.05  # 50ms 刷新
 
 
 class RecordingIndicator:
     """录音状态浮动指示器（单例）
 
-    使用 macOS NSPanel 创建不抢焦点的浮动窗口。
-    线程安全：show/hide 可从任何线程调用。
+    使用 macOS NSPanel 创建不抢焦点的浮动窗口，显示实时音量波形。
+    线程安全：show/hide/update_level 可从任何线程调用。
     """
 
     _instance: Optional['RecordingIndicator'] = None
@@ -40,8 +44,20 @@ class RecordingIndicator:
             return
         self._initialized = True
         self._panel = None
-        self._label = None
+        self._bar_layers = []
+        self._levels = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
         self._animation_task: Optional[asyncio.Task] = None
+        self._content_view = None
+
+    def update_level(self, rms: float) -> None:
+        """更新音量级别（从音频回调线程调用，线程安全）
+
+        Args:
+            rms: 音频 RMS 值（0.0 ~ 1.0 范围，通常 0 ~ 0.3）
+        """
+        # 归一化：RMS 通常 0~0.3，映射到 0~1
+        normalized = min(1.0, rms * 4.0)
+        self._levels.append(normalized)
 
     def show(self, loop: asyncio.AbstractEventLoop) -> None:
         """显示录音指示器（线程安全）"""
@@ -62,7 +78,7 @@ class RecordingIndicator:
             logger.warning(f"RecordingIndicator hide failed: {e}")
 
     async def _show_async(self) -> None:
-        """创建 NSPanel 并启动动画"""
+        """创建 NSPanel 并启动波形动画"""
         if self._panel is not None:
             return
 
@@ -73,10 +89,10 @@ class RecordingIndicator:
                     NSPanel, NSFloatingWindowLevel,
                     NSWindowStyleMaskNonactivatingPanel, NSWindowStyleMaskBorderless,
                     NSBackingStoreBuffered,
-                    NSTextField, NSFont, NSColor, NSMakeRect,
-                    NSView, NSScreen,
+                    NSColor, NSMakeRect, NSView, NSScreen,
                 )
                 from Quartz import CGEventGetLocation, CGEventCreate
+                import objc
             except ImportError:
                 logger.warning("录音指示器需要 PyObjC，请运行: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
                 return
@@ -85,20 +101,17 @@ class RecordingIndicator:
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-            # 获取鼠标位置（Quartz 坐标系：左上角为原点）
+            # 获取鼠标位置
             event = CGEventCreate(None)
             mouse = CGEventGetLocation(event)
-
-            # 转换为 AppKit 坐标系（左下角为原点）
             screen_h = NSScreen.mainScreen().frame().size.height
 
-            w, h = 105, 22
-            x = mouse.x - w / 2
-            y = screen_h - mouse.y + 5  # 鼠标上方一行距离
+            x = mouse.x - PANEL_W / 2
+            y = screen_h - mouse.y + 5
 
-            # 创建不抢焦点的浮动面板
+            # 创建面板
             panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-                NSMakeRect(x, y, w, h),
+                NSMakeRect(x, y, PANEL_W, PANEL_H),
                 NSWindowStyleMaskNonactivatingPanel | NSWindowStyleMaskBorderless,
                 NSBackingStoreBuffered,
                 False,
@@ -107,46 +120,54 @@ class RecordingIndicator:
             panel.setOpaque_(False)
             panel.setHasShadow_(True)
 
-            # 圆角 + 半透明深色背景
+            # 圆角胶囊 + 半透明深色背景
             panel.setBackgroundColor_(NSColor.clearColor())
-            content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, w, h))
+            content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, PANEL_W, PANEL_H))
             content.setWantsLayer_(True)
-            content.layer().setCornerRadius_(6)
+            content.layer().setCornerRadius_(CORNER_RADIUS)
             content.layer().setBackgroundColor_(
-                NSColor.colorWithRed_green_blue_alpha_(0.15, 0.15, 0.15, 0.75).CGColor()
+                NSColor.colorWithRed_green_blue_alpha_(0.1, 0.1, 0.1, 0.85).CGColor()
             )
             panel.setContentView_(content)
 
-            # 文字标签
-            label = NSTextField.labelWithString_(ANIMATION_FRAMES[0])
-            label.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0.0))
-            label.setTextColor_(NSColor.colorWithRed_green_blue_alpha_(0.3, 1, 0.55, 1))
-            label.setFrame_(NSMakeRect(8, 2, w - 16, 18))
-            label.setDrawsBackground_(False)
-            label.setBezeled_(False)
-            label.setEditable_(False)
-            label.setSelectable_(False)
-            content.addSubview_(label)
+            # 创建竖线 (CALayer)
+            from QuartzCore import CALayer
+            bar_layers = []
+            for i in range(BAR_COUNT):
+                bar = CALayer.alloc().init()
+                bx = PANEL_PADDING + i * (BAR_WIDTH + BAR_GAP)
+                bar.setFrame_(((bx, (PANEL_H - BAR_MIN_H) / 2), (BAR_WIDTH, BAR_MIN_H)))
+                bar.setCornerRadius_(BAR_WIDTH / 2)
+                bar.setBackgroundColor_(
+                    NSColor.colorWithRed_green_blue_alpha_(0.0, 0.85, 1.0, 0.9).CGColor()
+                )
+                content.layer().addSublayer_(bar)
+                bar_layers.append(bar)
 
-            # 确保面板可见（sleep/wake 后可能需要重新激活）
+            # 显示面板
             panel.setIsVisible_(True)
             panel.display()
             panel.orderFrontRegardless()
 
-            # 刷新 AppKit 事件循环让面板渲染
             from Foundation import NSRunLoop, NSDate
             NSRunLoop.currentRunLoop().runUntilDate_(
                 NSDate.dateWithTimeIntervalSinceNow_(0.05)
             )
 
             self._panel = panel
-            self._label = label
+            self._content_view = content
+            self._bar_layers = bar_layers
+            # 重置音量数据
+            self._levels = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
 
-            logger.info(f"RecordingIndicator 已显示: x={x:.0f}, y={y:.0f}, mouse=({mouse.x:.0f},{mouse.y:.0f}), screen_h={screen_h:.0f}")
+            logger.info(
+                f"RecordingIndicator 已显示: x={x:.0f}, y={y:.0f}, "
+                f"mouse=({mouse.x:.0f},{mouse.y:.0f}), screen_h={screen_h:.0f}"
+            )
 
-            # 启动动画
+            # 启动波形更新
             self._animation_task = asyncio.get_event_loop().create_task(
-                self._animate_loop()
+                self._update_loop()
             )
 
         except Exception as e:
@@ -161,7 +182,6 @@ class RecordingIndicator:
         if self._panel:
             try:
                 self._panel.close()
-                # 刷新 AppKit 事件循环让面板消失
                 from Foundation import NSRunLoop, NSDate
                 NSRunLoop.currentRunLoop().runUntilDate_(
                     NSDate.dateWithTimeIntervalSinceNow_(0.05)
@@ -169,21 +189,38 @@ class RecordingIndicator:
             except Exception:
                 pass
             self._panel = None
-            self._label = None
+            self._bar_layers = []
+            self._content_view = None
 
-    async def _animate_loop(self) -> None:
-        """动画循环"""
+    async def _update_loop(self) -> None:
+        """波形更新循环"""
         from Foundation import NSRunLoop, NSDate
-        frame = 0
+        from QuartzCore import CATransaction
+
         try:
             while True:
-                await asyncio.sleep(ANIMATION_INTERVAL)
-                frame = (frame + 1) % len(ANIMATION_FRAMES)
-                if self._label:
-                    self._label.setStringValue_(ANIMATION_FRAMES[frame])
-                    # 刷新 AppKit 事件循环让面板更新
-                    NSRunLoop.currentRunLoop().runUntilDate_(
-                        NSDate.dateWithTimeIntervalSinceNow_(0.001)
-                    )
+                await asyncio.sleep(UPDATE_INTERVAL)
+                if not self._bar_layers:
+                    break
+
+                # 关闭隐式动画，避免竖线变化时有延迟过渡效果
+                CATransaction.begin()
+                CATransaction.setDisableActions_(True)
+
+                levels = list(self._levels)
+                for i, bar in enumerate(self._bar_layers):
+                    level = levels[i] if i < len(levels) else 0.0
+                    h = BAR_MIN_H + level * (BAR_MAX_H - BAR_MIN_H)
+                    bx = PANEL_PADDING + i * (BAR_WIDTH + BAR_GAP)
+                    by = (PANEL_H - h) / 2
+                    bar.setFrame_(((bx, by), (BAR_WIDTH, h)))
+
+                CATransaction.commit()
+
+                # 刷新渲染
+                NSRunLoop.currentRunLoop().runUntilDate_(
+                    NSDate.dateWithTimeIntervalSinceNow_(0.001)
+                )
+
         except asyncio.CancelledError:
             pass

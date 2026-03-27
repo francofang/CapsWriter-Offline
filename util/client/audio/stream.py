@@ -70,9 +70,17 @@ class AudioStreamManager:
         # 只在录音状态时处理数据
         if not self.state.recording:
             return
-        
+
+        # 更新录音指示器音量
+        try:
+            from util.ui.recording_indicator import RecordingIndicator
+            rms = float(np.sqrt(np.mean(indata ** 2)))
+            RecordingIndicator().update_level(rms)
+        except Exception:
+            pass
+
         import asyncio
-        
+
         # 将数据放入队列
         if self.state.loop and self.state.queue_in:
             asyncio.run_coroutine_threadsafe(
@@ -96,24 +104,48 @@ class AudioStreamManager:
         else:
             logger.debug("音频流已正常结束")
     
+    def _find_device(self) -> tuple:
+        """
+        查找音频输入设备
+
+        Returns:
+            (device_id, device_name, channels) 元组
+        """
+        from config_client import ClientConfig as Config
+        preferred = getattr(Config, 'mic_device', None)
+
+        if preferred:
+            # 按名称部分匹配查找指定设备
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                if d['max_input_channels'] > 0 and preferred.lower() in d['name'].lower():
+                    channels = min(2, d['max_input_channels'])
+                    logger.info(f"匹配到指定设备: [{i}] {d['name']}")
+                    return i, d['name'], channels
+            logger.warning(f"未找到匹配 '{preferred}' 的设备，回退到系统默认")
+
+        # 使用系统默认
+        device = sd.query_devices(kind='input')
+        channels = min(2, device['max_input_channels'])
+        return None, device.get('name', '未知设备'), channels
+
     def open(self) -> Optional[sd.InputStream]:
         """
         打开音频流
-        
+
         Returns:
             创建的音频输入流，如果失败返回 None
         """
         # 检测音频设备
         try:
-            device = sd.query_devices(kind='input')
-            self._channels = min(2, device['max_input_channels'])
-            device_name = device.get('name', '未知设备')
+            device_id, device_name, self._channels = self._find_device()
             console.print(
-                f'使用默认音频设备：[italic]{device_name}，声道数：{self._channels}',
+                f'使用音频设备：[italic]{device_name}，声道数：{self._channels}',
                 end='\n\n'
             )
             logger.info(f"找到音频设备: {device_name}, 声道数: {self._channels}")
         except UnicodeDecodeError:
+            device_id = None
             console.print(
                 "由于编码问题，暂时无法获得麦克风设备名字",
                 end='\n\n',
@@ -125,13 +157,13 @@ class AudioStreamManager:
             logger.error("未找到麦克风设备")
             input('按回车键退出')
             sys.exit(1)
-        
+
         # 创建音频流
         try:
             stream = sd.InputStream(
                 samplerate=self.SAMPLE_RATE,
                 blocksize=int(self.BLOCK_DURATION * self.SAMPLE_RATE),
-                device=None,
+                device=device_id,
                 dtype="float32",
                 channels=self._channels,
                 callback=self._audio_callback,
