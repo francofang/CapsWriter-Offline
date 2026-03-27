@@ -157,6 +157,10 @@ def setup_client_components(base_dir):
         from util.client.shortcut.listener_monitor import start as start_monitor
         start_monitor(interval=30)
 
+        # 注册 Carbon 恢复热键 Ctrl+Shift+R（Phase 1: 只打日志）
+        from util.client.shortcut.carbon_hotkey import register_recovery_hotkey
+        register_recovery_hotkey()
+
     logger.info("客户端初始化完成，等待语音输入...")
     return state
 
