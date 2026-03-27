@@ -98,50 +98,14 @@ class RecordingIndicator:
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-            # 放在输入焦点正上方（优先 AX 文本光标，回退鼠标位置）
+            # 放在鼠标光标（输入焦点）正上方
             screen_h = NSScreen.mainScreen().frame().size.height
-            caret_x, caret_y_quartz = None, None
 
-            try:
-                from ApplicationServices import (
-                    AXUIElementCreateSystemWide,
-                    AXUIElementCopyAttributeValue,
-                    AXUIElementCopyParameterizedAttributeValue,
-                )
-                system_wide = AXUIElementCreateSystemWide()
-                err, focused = AXUIElementCopyAttributeValue(
-                    system_wide, 'AXFocusedUIElement', None
-                )
-                if err == 0 and focused:
-                    err, text_range = AXUIElementCopyAttributeValue(
-                        focused, 'AXSelectedTextRange', None
-                    )
-                    if err == 0 and text_range:
-                        err, bounds = AXUIElementCopyParameterizedAttributeValue(
-                            focused, 'AXBoundsForRange', text_range, None
-                        )
-                        if err == 0 and bounds:
-                            from Quartz import AXValueGetValue, kAXValueTypeCGRect
-                            import ctypes
-                            # bounds 是 AXValue，提取 CGRect
-                            rect = Quartz.CGRect()
-                            if AXValueGetValue(bounds, kAXValueTypeCGRect, ctypes.byref(rect)):
-                                # AX 坐标系同 Quartz（左上角原点）
-                                caret_x = rect.origin.x + rect.size.width / 2
-                                caret_y_quartz = rect.origin.y
-            except Exception as e:
-                logger.debug(f"AX 文本光标获取失败: {e}")
-
-            # 获取鼠标位置（回退用）
             event = CGEventCreate(None)
             mouse = CGEventGetLocation(event)
 
-            if caret_x is not None:
-                x = caret_x - PANEL_W / 2
-                y = screen_h - caret_y_quartz + 5
-            else:
-                x = mouse.x - PANEL_W / 2
-                y = screen_h - mouse.y + 5
+            x = mouse.x - PANEL_W / 2
+            y = screen_h - mouse.y + 5  # 鼠标上方 5px（AppKit 坐标系）
 
             # 创建面板
             panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
